@@ -2,11 +2,9 @@ import numpy as np
 
 def PSVRTmatrix(p, mi, mt):
     """
-    Python version of the MATLAB PSVRTmatrix function.
-
-    Parameters
+    Inputs
     ----------
-    p : float or 1D numpy array
+    p : float
         Ray parameter (s/km or consistent units).
     mi : array-like of length 3
         [Vp_i, Vs_i, Rho_i] for incident medium.
@@ -15,12 +13,8 @@ def PSVRTmatrix(p, mi, mt):
 
     Returns
     -------
-    RTmatrix : ndarray, shape (8, len(p))
-        [Rpp, Rps, Rss, Rsp, Tpp, Tps, Tss, Tsp]
-        Each row is a coefficient vs p.
+    Rpp, Rps, Rss, Rsp, Tpp, Tps, Tss, Tsp
     """
-    p = np.asarray(p, dtype=float)
-
     # Unpack incident/transmitted medium properties
     Vpi, Vsi, rhoi = mi
     Vpt, Vst, rhot = mt
@@ -55,7 +49,115 @@ def PSVRTmatrix(p, mi, mt):
     Tss =   2 * rhoi * etabi * E * (Vsi / Vst) / D
     Tsp = -(2 * rhoi * etabi * G * p * (Vsi / Vpi)) / D
 
-    # Stack into 8 × N array (matching MATLAB’s `[Rpp' Rps' ...]`)
-    RTmatrix = np.vstack([Rpp, Rps, Rss, Rsp, Tpp, Tps, Tss, Tsp])
+    return Rpp, Rps, Rss, Rsp, Tpp, Tps, Tss, Tsp
 
-    return RTmatrix
+def SHmatrix(p, mi, mt):
+    """
+    Inputs
+    ----------
+    p : float
+        Ray parameter (s/km or consistent units).
+    mi : array-like of length 3
+        [Vp_i, Vs_i, Rho_i] for incident medium.
+    mt : array-like of length 3
+        [Vp_t, Vs_t, Rho_t] for transmitted medium.
+
+    Returns
+    -------
+    Rss, Tss
+    """
+    # Unpack incident/transmitted medium properties
+    _, Vsi, rhoi = mi
+    _, Vst, rhot = mt
+
+    # --- Vertical slownesses ---
+    etabi = np.sqrt(1.0 / (Vsi * Vsi) - p * p)
+    etabt = np.sqrt(1.0 / (Vst * Vst) - p * p)
+
+    # --- Coefficients ---
+    delta = rhoi * Vsi * etabi + rhot * Vst * etabt
+
+    # --- Reflection and transmission coefficients ---
+    Rss = (rhoi * Vsi * etabi - rhot * Vst * etabt) / delta
+    Tss = 2 * rhoi * Vsi * etabi / delta
+
+    return Rss, Tss
+
+def check_model(model, prior, rayp):
+    H = np.asarray(model.H, dtype=float)
+    v = np.asarray(model.v[:-1], dtype=float)
+    tau = 2.0 * H * np.sqrt(1.0 / (v**2) - rayp**2)
+    arr = np.cumsum(tau)
+    if arr[-1] < prior.tlen:
+        return True
+    return False
+
+def prepare_experiment(exp_vars):
+    """
+    Load data and prior for one experiment, based on exp_vars.
+    Modifies and returns exp_vars dict.
+    """
+
+    import os, pickle
+    from marppss.model import Prior, Bookkeeping
+
+    filedir   = exp_vars["filedir"]
+    event_name = exp_vars["event_name"]
+    mode = exp_vars["mode"]
+    runname   = exp_vars["runname"]
+
+    PPdir = event_name + "_PP"
+    SSdir = event_name + "_SS"
+
+    CDinv, CDinv_PP, CDinv_SS = None, None, None
+
+    # --- Load data ---
+    if mode == 1: datadir = os.path.join(filedir, "data", PPdir)
+    if mode == 2: datadir = os.path.join(filedir, "data", SSdir)
+    if mode == 3: pass
+
+    data = np.load(os.path.join(datadir, "data.npz"))
+    exp_vars["P"], exp_vars["D"], time = data["P"], data["D"], data["time"]
+
+    if exp_vars["useCD"]:
+        CD = np.loadtxt(os.path.join(datadir, "CD.csv"), delimiter=",")
+        # always "negOnly"
+        half_len = CD.shape[0] // 2
+        CD = CD[:half_len, :half_len]
+        CDinv = np.linalg.pinv(CD)
+        exp_vars["CDinv"] = CDinv
+
+    # --- Prior ---
+    dt = time[1] - time[0]
+    tlen = (len(time) // 2) * dt
+    prior = Prior(
+        stdP=exp_vars["stdP"], maxN=exp_vars["maxN"],
+        tlen=tlen, dt=dt,
+        HRange=tuple(exp_vars["HRange"]),
+        wRange=tuple(exp_vars["wRange"]),
+        vRange=tuple(exp_vars["vRange"]),
+        rhoRange=tuple(exp_vars["rhoRange"])
+    )
+
+    # --- Bookkeeping ---
+    bookkeeping = Bookkeeping(
+        mode=exp_vars["mode"],
+        rayp=exp_vars["rayp"],
+        totalSteps=exp_vars["totalSteps"],
+        burnInSteps=exp_vars["burnInSteps"],
+        nSaveModels=exp_vars["nSaveModels"],
+        actionsPerStep=exp_vars["actionsPerStep"]
+    )
+
+    # --- Save ---
+    sharedDir = os.path.join(filedir, "run", exp_vars["modname"], runname)
+    os.makedirs(sharedDir, exist_ok=True)
+    with open(os.path.join(sharedDir, "prior.pkl"), "wb") as f:
+        pickle.dump(prior, f)
+    with open(os.path.join(sharedDir, "bookkeeping.pkl"), "wb") as f:
+        pickle.dump(bookkeeping, f)
+
+    exp_vars["prior"] = prior
+    exp_vars["bookkeeping"] = bookkeeping
+
+    return exp_vars

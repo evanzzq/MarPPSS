@@ -1,0 +1,43 @@
+common:
+
+  filedir: "/Users/evanzhang/zzq@umd.edu - Google Drive/My Drive/Research/MarPPSS"
+  
+  useCD: false        # if true, provide CDinv_path per experiment or globally
+  
+  HRange: [15.0, 30.0]
+  wRange: [0.5, 1.5]
+  vRange: [1.5, 5.0]
+  rhoRange: [1.6, 2.0]
+  
+  maxN: 1
+  stdP: 0.1
+  
+  totalSteps: 1000000
+  burnInSteps: 800000
+  nSaveModels: 200
+  actionsPerStep: 1
+  num_chains: 8
+
+experiments:
+
+  # - event_name: "S0976a_src3s"
+  #   mode: 2                   # 1=PP, 2=SS, 3=joint
+  #   rayp: 0.1712
+  #   runname: "run_8c_sort_NarrowH"
+
+  # - event_name: "S0976a_src3s"
+  #   mode: 2                   # 1=PP, 2=SS, 3=joint
+  #   rayp: 0.1712
+  #   maxN: 2
+  #   runname: "run_8c_maxN2_sort_NarrowH"
+  
+  # - event_name: "S0976a_src4s"
+  #   mode: 2                   # 1=PP, 2=SS, 3=joint
+  #   rayp: 0.1712
+  #   runname: "run_8c_sort_NarrowH"
+
+  - event_name: "S0976a_src4s"
+    mode: 2                   # 1=PP, 2=SS, 3=joint
+    rayp: 0.1712
+    maxN: 1
+    runname: "run_8c_maxN2_sort_HRange_15_30"
