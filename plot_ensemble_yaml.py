@@ -51,13 +51,23 @@ with open(os.path.join(saveDir, "bookkeeping.pkl"), "rb") as f:
     bookkeeping = pickle.load(f)
 
 # ---- Load data files ----
-if mode == 1: datadir = os.path.join(filedir, "data", PPdir)
-if mode == 2: datadir = os.path.join(filedir, "data", SSdir)
-if mode == 3: pass
-npz_file = os.path.join(datadir, "data.npz")
-
-data = np.load(npz_file)
-P, D, time = data["P"], data["D"], data["time"]
+if mode in [1, 2]:
+    if mode == 1: datadir = os.path.join(filedir, "data", PPdir)
+    if mode == 2: datadir = os.path.join(filedir, "data", SSdir)
+    npz_file = os.path.join(datadir, "data.npz")
+    data = np.load(npz_file)
+    P, D, time = data["P"], data["D"], data["time"]
+elif mode == 3:
+    # PP and SS dirs
+    datadir_PP = os.path.join(filedir, "data", PPdir)
+    datadir_SS = os.path.join(filedir, "data", SSdir)
+    # Load data
+    data_PP = np.load(os.path.join(datadir_PP, "data.npz"))
+    P_PP, D_PP, time = data_PP["P"], data_PP["D"], data_PP["time"]
+    data_SS = np.load(os.path.join(datadir_SS, "data.npz"))
+    P_SS, D_SS, _ = data_SS["P"], data_SS["D"], data_SS["time"]
+    P = np.column_stack((P_PP, P_SS))
+    D = np.column_stack((D_PP, D_SS))
 
 # ---- Collect ensembles from chains ----
 ensemble_all = []
@@ -127,5 +137,5 @@ else:
         ensemble_all = pickle.load(f)
 
 # ---- Plot ----
-plot_velocity_ensemble(ensemble_all)
+plot_velocity_ensemble(ensemble_all, mode)
 plot_predicted_vs_input(ensemble_all, P, D, prior, bookkeeping)

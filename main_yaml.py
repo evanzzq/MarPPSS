@@ -22,15 +22,10 @@ def run_chain(chain_id, exp_vars):
     prior        = exp_vars["prior"]
     bookkeeping  = exp_vars["bookkeeping"]
     CDinv        = exp_vars.get("CDinv", None)
-    CDinv_PP     = exp_vars.get("CDinv_PP", None)
-    CDinv_SS     = exp_vars.get("CDinv_SS", None)
+    P            = exp_vars["P"]
+    D            = exp_vars["D"]
 
-    if mode in (1, 2):
-        P = exp_vars["P"]
-        D = exp_vars["D"]
-        ensemble, logL_trace = rjmcmc_run(P, D, prior, bookkeeping, saveDir, CDinv=CDinv)
-    elif mode == 3:
-        pass
+    ensemble, logL_trace = rjmcmc_run(P, D, prior, bookkeeping, saveDir, CDinv=CDinv)
 
     # --- Save results ---
     with open(os.path.join(saveDir, "ensemble.pkl"), "wb") as f:

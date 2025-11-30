@@ -5,6 +5,7 @@ import numpy as np
 class Bookkeeping:
     mode:           int # 1 - PP, 2 - SS, 3 - joint
     rayp:           np.ndarray # mode 1/2: [rayp]; mode 3: [rayp_PP, rayp_SS]
+    fitRange:       np.ndarray = None # mode 1/2: [tmin, tmax]; mode 3: [tmin_PP, tmax_PP, tmin_SS, tmax_SS]
     totalSteps:     int = int(1e6)
     burnInSteps:    int = None
     nSaveModels:    int = 100
@@ -15,7 +16,8 @@ class Bookkeeping:
             self.burnInSteps = int(self.totalSteps // 2)
 @dataclass
 class Prior:
-    stdP: float = 0.1
+    stdPP: float = 0.1
+    stdSS: float = 0.1
     maxN: int = 2
     dt: float = None
     tlen: float = None # half length in seconds
@@ -40,9 +42,12 @@ class Prior:
             self.rhoStd = 0.05 * (self.rhoRange[1] - self.rhoRange[0])
 @dataclass
 class Model:
+    # in mode 1/2 (PP/SS), v refers to vp or vs respectively, and rho is not used.
+    # in mode 3, v refers to vs, and rho is vp/vs; i.e., vp = vs * rho.
     Nlayer: int
     H: np.ndarray
     w: np.ndarray # stretch factor, same length as H
+    w2: np.ndarray # in mode 3 (joint), w is for PP and w2 is for SS
     v: np.ndarray # len(v) = len(H) + 1
     rho: np.ndarray # len(rho) = len(v) = len(H) + 1
 
@@ -53,6 +58,7 @@ class Model:
             Nlayer=1,
             H=np.random.uniform(prior.HRange[0], prior.HRange[1], 1),
             w=np.ones(1),
+            w2=np.ones(1),
             v=np.random.uniform(prior.vRange[0], prior.vRange[1], 2),
             rho=np.random.uniform(prior.rhoRange[0], prior.rhoRange[1], 2) # rho will be ignore in mode 1/2
         )

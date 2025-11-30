@@ -84,9 +84,17 @@ def SHmatrix(p, mi, mt):
     return Rss, Tss
 
 def check_model(model, prior, rayp):
+
     H = np.asarray(model.H, dtype=float)
     v = np.asarray(model.v[:-1], dtype=float)
-    tau = 2.0 * H * np.sqrt(1.0 / (v**2) - rayp**2)
+
+    if len(rayp) == 1:
+        # mode 1/2
+        tau = 2.0 * H * np.sqrt(1.0 / (v**2) - rayp**2)
+    else:
+        # mode 3: use SS (because of longer travel time)
+        tau = 2.0 * H * np.sqrt(1.0 / (v**2) - rayp[1]**2)
+    
     arr = np.cumsum(tau)
     if arr[-1] < prior.tlen:
         return True
@@ -112,26 +120,50 @@ def prepare_experiment(exp_vars):
     CDinv, CDinv_PP, CDinv_SS = None, None, None
 
     # --- Load data ---
-    if mode == 1: datadir = os.path.join(filedir, "data", PPdir)
-    if mode == 2: datadir = os.path.join(filedir, "data", SSdir)
-    if mode == 3: pass
-
-    data = np.load(os.path.join(datadir, "data.npz"))
-    exp_vars["P"], exp_vars["D"], time = data["P"], data["D"], data["time"]
-
-    if exp_vars["useCD"]:
-        CD = np.loadtxt(os.path.join(datadir, "CD.csv"), delimiter=",")
-        # always "negOnly"
-        half_len = CD.shape[0] // 2
-        CD = CD[:half_len, :half_len]
-        CDinv = np.linalg.pinv(CD)
-        exp_vars["CDinv"] = CDinv
+    if mode in [1, 2]:
+        if mode == 1: datadir = os.path.join(filedir, "data", PPdir)
+        if mode == 2: datadir = os.path.join(filedir, "data", SSdir)
+        data = np.load(os.path.join(datadir, "data.npz"))
+        exp_vars["P"], exp_vars["D"], time = data["P"], data["D"], data["time"]
+        if exp_vars["useCD"]:
+            CD = np.loadtxt(os.path.join(datadir, "CD.csv"), delimiter=",")
+            # always "negOnly"
+            half_len = CD.shape[0] // 2
+            CD = CD[:half_len, :half_len]
+            CDinv = np.linalg.pinv(CD)
+            exp_vars["CDinv"] = CDinv
+    elif mode == 3:
+        # PP and SS dirs
+        datadir_PP = os.path.join(filedir, "data", PPdir)
+        datadir_SS = os.path.join(filedir, "data", SSdir)
+        # Load data
+        data_PP = np.load(os.path.join(datadir_PP, "data.npz"))
+        P_PP, D_PP, time = data_PP["P"], data_PP["D"], data_PP["time"]
+        data_SS = np.load(os.path.join(datadir_SS, "data.npz"))
+        P_SS, D_SS, time_SS = data_SS["P"], data_SS["D"], data_SS["time"]
+        # Sanity check on length
+        if len(time_SS) != len(time) or (time_SS[1] - time_SS[0]) != (time[1] - time[0]):
+            raise ValueError("Time vector for PP and SS don't match!")
+        # Write to exp_vars
+        exp_vars["P"] = np.column_stack((P_PP, P_SS))
+        exp_vars["D"] = np.column_stack((D_PP, D_SS))
+        # Load CD matrices
+        if exp_vars["useCD"]:
+            CD_PP = np.loadtxt(os.path.join(filedir, "data", PPdir, "CD.csv"), delimiter=",")
+            CD_SS = np.loadtxt(os.path.join(filedir, "data", SSdir, "CD.csv"), delimiter=",")
+            # Always use only negative (precursor) part
+            half_len = CD_PP.shape[0] // 2
+            CD_PP = CD_PP[:half_len, :half_len]
+            half_len = CD_SS.shape[0] // 2
+            CD_SS = CD_SS[:half_len, :half_len]
+            CDinv_PP, CDinv_SS = np.linalg.pinv(CD_PP), np.linalg.pinv(CD_SS)
+            exp_vars["CDinv"] = [CDinv_PP, CDinv_SS]
 
     # --- Prior ---
     dt = time[1] - time[0]
     tlen = (len(time) // 2) * dt
     prior = Prior(
-        stdP=exp_vars["stdP"], maxN=exp_vars["maxN"],
+        stdPP=exp_vars["stdPP"], stdSS=exp_vars["stdSS"], maxN=exp_vars["maxN"],
         tlen=tlen, dt=dt,
         HRange=tuple(exp_vars["HRange"]),
         wRange=tuple(exp_vars["wRange"]),
@@ -143,6 +175,7 @@ def prepare_experiment(exp_vars):
     bookkeeping = Bookkeeping(
         mode=exp_vars["mode"],
         rayp=exp_vars["rayp"],
+        fitRange=exp_vars["fitRange"],
         totalSteps=exp_vars["totalSteps"],
         burnInSteps=exp_vars["burnInSteps"],
         nSaveModels=exp_vars["nSaveModels"],
