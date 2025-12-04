@@ -167,6 +167,7 @@ def prepare_experiment(exp_vars):
         tlen=tlen, dt=dt,
         HRange=tuple(exp_vars["HRange"]),
         wRange=tuple(exp_vars["wRange"]),
+        logeRange=tuple(exp_vars["logeRange"]),
         vRange=tuple(exp_vars["vRange"]),
         rhoRange=tuple(exp_vars["rhoRange"])
     )
@@ -176,6 +177,7 @@ def prepare_experiment(exp_vars):
         mode=exp_vars["mode"],
         rayp=exp_vars["rayp"],
         fitRange=exp_vars["fitRange"],
+        fitLoge=exp_vars["fitLoge"],
         totalSteps=exp_vars["totalSteps"],
         burnInSteps=exp_vars["burnInSteps"],
         nSaveModels=exp_vars["nSaveModels"],

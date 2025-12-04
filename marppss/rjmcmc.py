@@ -35,8 +35,11 @@ def calc_like_prob(P, D, model, prior, bookkeeping, CDinv=None):
     # Compute log likelihood
     if CDinv is None:
         sigma = prior.stdPP if bookkeeping.mode == 1 else prior.stdSS
+        sigma *= np.exp(0.5 * model.loge)
         logL = -0.5 * np.sum((Diff / sigma) ** 2)
     else:
+        CDinv = np.asarray(CDinv)
+        CDinv *= np.exp(-model.loge)
         logL = -0.5 * np.trace(Diff.T @ CDinv @ Diff) # not fixed for selected range case
 
     return logL
@@ -83,8 +86,14 @@ def calc_like_prob_joint(P_PP, P_SS, D_PP, D_SS,
         N_PP = Diff_PP.size
         N_SS = Diff_SS.size
 
-        chi2_PP = np.sum((Diff_PP / prior.stdPP) ** 2)
-        chi2_SS = np.sum((Diff_SS / prior.stdSS) ** 2)
+        sigmaPP = prior.stdPP
+        sigmaSS = prior.stdSS
+
+        sigmaPP *= np.exp(0.5 * model.loge)
+        sigmaSS *= np.exp(0.5 * model.loge2)
+
+        chi2_PP = np.sum((Diff_PP / sigmaPP) ** 2)
+        chi2_SS = np.sum((Diff_SS / sigmaSS) ** 2)
 
         # Normalized log-likes (per sample)
         logL_PP = -0.5 * (chi2_PP / N_PP)
@@ -94,11 +103,17 @@ def calc_like_prob_joint(P_PP, P_SS, D_PP, D_SS,
         N_PP = Diff_PP.size
         N_SS = Diff_SS.size
 
+        CDinv_PP = np.asarray(CDinv_PP)
+        CDinv_PP *= np.exp(-model.loge)
+
+        CDinv_SS = np.asarray(CDinv_SS)
+        CDinv_SS *= np.exp(-model.loge)
+
         chi2_PP = np.trace(Diff_PP.T @ CDinv_PP @ Diff_PP)
         chi2_SS = np.trace(Diff_SS.T @ CDinv_SS @ Diff_SS)
 
-        logL_PP = -0.5 * (chi2_PP / N_PP)
-        logL_SS = -0.5 * (chi2_SS / N_SS)
+        logL_PP = -0.5 * (chi2_PP) #  / N_PP
+        logL_SS = -0.5 * (chi2_SS) #  / N_SS
 
     logL = logL_PP + logL_SS
     return logL, logL_PP, logL_SS
@@ -196,6 +211,26 @@ def update_w2(model, prior):
         return model_new, True
     return model, False
 
+def update_loge(model, prior):
+    # Copy model
+    model_new = copy.deepcopy(model)
+    # Update
+    model_new.loge += prior.logeStd * np.random.randn()
+    # Check range and return
+    if prior.logeRange[0] <= model_new.loge <= prior.logeRange[1]:
+        return model_new, True
+    return model, False
+
+def update_loge2(model, prior):
+    # Copy model
+    model_new = copy.deepcopy(model)
+    # Update
+    model_new.loge2 += prior.logeStd * np.random.randn()
+    # Check range and return
+    if prior.logeRange[0] <= model_new.loge2 <= prior.logeRange[1]:
+        return model_new, True
+    return model, False
+
 def update_v(model, prior, rayp):
     # Copy model
     model_new = copy.deepcopy(model)
@@ -242,6 +277,8 @@ def rjmcmc_run(P, D, prior, bookkeeping, saveDir, CDinv=None):
     # mode 1/2: P and D are one trace
     # mode 3: P_PP = P[:,0]; P_SS = P[:,1]; same for D; CDinv_PP = CDinv[0]; CDinvv_SS = CDinv[1]
 
+    n_len =  P.shape[0]
+
     # Extract variables for mode 3
     if bookkeeping.mode == 3:
         P_PP, P_SS, D_PP, D_SS = P[:,0], P[:,1], D[:,0], D[:,1]
@@ -279,9 +316,12 @@ def rjmcmc_run(P, D, prior, bookkeeping, saveDir, CDinv=None):
     ensemble = []
 
     # Action pool
-    actionPool = [2,3,5] # H, w, v
+    actionPool = [2,3,7] # H, w, v
     if prior.maxN > 1: actionPool = np.append(actionPool, [0,1]) # birth, death
-    if bookkeeping.mode == 3: actionPool = np.append(actionPool, [4,6]) # w2, rho
+    if bookkeeping.mode == 3: actionPool = np.append(actionPool, [4,8]) # w2, rho
+    if bookkeeping.fitLoge:
+        if bookkeeping.mode in [1, 2]: actionPool = np.append(actionPool, [5])
+        if bookkeeping.mode == 3: actionPool = np.append(actionPool, [5,6])
 
     for iStep in range(totalSteps):
 
@@ -300,8 +340,12 @@ def rjmcmc_run(P, D, prior, bookkeeping, saveDir, CDinv=None):
             elif action == 4:
                 model_new, _ = update_w2(model_new, prior)
             elif action == 5:
-                model_new, _ = update_v(model_new, prior, bookkeeping.rayp)
+                model_new, _ = update_loge(model_new, prior)
             elif action == 6:
+                model_new, _ = update_loge2(model_new, prior)
+            elif action == 7:
+                model_new, _ = update_v(model_new, prior, bookkeeping.rayp)
+            elif action == 8:
                 model_new, _ = update_rho(model_new, prior, bookkeeping.rayp)
 
         # Compute likelihood
@@ -313,7 +357,7 @@ def rjmcmc_run(P, D, prior, bookkeeping, saveDir, CDinv=None):
                 model_new, prior, bookkeeping, CDinv_PP=CDinv_PP, CDinv_SS=CDinv_SS)
 
         # Acceptance probability
-        log_accept_ratio = new_logL - logL
+        log_accept_ratio = (new_logL - logL) + n_len * ((model.loge - model_new.loge) + (model.loge2 - model_new.loge2))
 
         if np.log(np.random.rand()) < log_accept_ratio:
             model = model_new
