@@ -65,6 +65,8 @@ def calc_like_prob_joint(P_PP, P_SS, D_PP, D_SS,
     Diff_PP = (D_PP_model - D_PP)
     Diff_SS = (D_SS_model - D_SS)
 
+    Diff_PP, Diff_SS = Diff_PP[:, np.newaxis], Diff_SS[:, np.newaxis]
+
     if bookkeeping.fitRange is None:
         # Take the full negative (precursor) side
         Diff_PP = Diff_PP[:len(Diff_PP) // 2]
@@ -82,9 +84,6 @@ def calc_like_prob_joint(P_PP, P_SS, D_PP, D_SS,
     
     # Compute log likelihood
     if CDinv_PP is None or CDinv_SS is None:
-        # Number of samples in each window
-        N_PP = Diff_PP.size
-        N_SS = Diff_SS.size
 
         sigmaPP = prior.stdPP
         sigmaSS = prior.stdSS
@@ -96,17 +95,18 @@ def calc_like_prob_joint(P_PP, P_SS, D_PP, D_SS,
         chi2_SS = np.sum((Diff_SS / sigmaSS) ** 2)
 
         # Normalized log-likes (per sample)
-        logL_PP = -0.5 * (chi2_PP / N_PP)
-        logL_SS = -0.5 * (chi2_SS / N_SS)
+        logL_PP = -0.5 * (chi2_PP)
+        logL_SS = -0.5 * (chi2_SS)
+
     else:
-        # not fixed for selected range case
-        N_PP = Diff_PP.size
-        N_SS = Diff_SS.size
 
         CDinv_PP = np.asarray(CDinv_PP)
+        if bookkeeping.fitRange is not None: 
+            CDinv_PP = CDinv_PP[left_PP:right_PP, left_PP:right_PP]
         CDinv_PP *= np.exp(-model.loge)
 
         CDinv_SS = np.asarray(CDinv_SS)
+        if bookkeeping.fitRange is not None: CDinv_SS = CDinv_SS[left_SS:right_SS, left_SS:right_SS]
         CDinv_SS *= np.exp(-model.loge)
 
         chi2_PP = np.trace(Diff_PP.T @ CDinv_PP @ Diff_PP)

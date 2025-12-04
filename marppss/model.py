@@ -36,15 +36,15 @@ class Prior:
 
     def __post_init__(self):
         if self.HStd is None:
-            self.HStd = 0.05 * (self.HRange[1] - self.HRange[0])
+            self.HStd = 0.1 * (self.HRange[1] - self.HRange[0])
         if self.wStd is None:
-            self.wStd = 0.05 * (self.wRange[1] - self.wRange[0])
+            self.wStd = 0.1 * (self.wRange[1] - self.wRange[0])
         if self.logeStd is None:
-            self.logeStd = 0.05 * (self.logeRange[1] - self.logeRange[0])
+            self.logeStd = 0.1 * (self.logeRange[1] - self.logeRange[0])
         if self.vStd is None:
-            self.vStd = 0.05 * (self.vRange[1] - self.vRange[0])
+            self.vStd = 0.2 * (self.vRange[1] - self.vRange[0])
         if self.rhoStd is None:
-            self.rhoStd = 0.05 * (self.rhoRange[1] - self.rhoRange[0])
+            self.rhoStd = 0.1 * (self.rhoRange[1] - self.rhoRange[0])
 @dataclass
 class Model:
     # in mode 1/2 (PP/SS), v refers to vp or vs respectively, and rho is not used.

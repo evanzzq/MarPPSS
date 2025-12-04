@@ -4,8 +4,8 @@ import numpy as np
 from marppss.visualization import plot_velocity_ensemble, plot_predicted_vs_input
 
 # ==== Config ====
-# filedir = "H:/My Drive/Research/SharpSSPy"
-filedir = "/Users/evanzhang/zzq@umd.edu - Google Drive/My Drive/Research/MarPPSS"
+filedir = "H:/My Drive/Research/MarPPSS"
+# filedir = "/Users/evanzhang/zzq@umd.edu - Google Drive/My Drive/Research/MarPPSS"
 
 yaml_file = "parameter_setup.yaml"
 ensemble_filename = "ensemble.pkl"   # or whatever name you use

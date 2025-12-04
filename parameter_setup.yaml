@@ -1,13 +1,27 @@
 common:
 
-  filedir: "/Users/evanzhang/zzq@umd.edu - Google Drive/My Drive/Research/MarPPSS"
-  
-  useCD: false        # if true, provide CDinv_path per experiment or globally
-  
+  # basedir: "/Users/evanzhang/zzq@umd.edu - Google Drive/My Drive/Research"
+  basedir: "H:/My Drive/Research"
+
+  datadir_subpaths:
+    - "SharpSSPy"
+    - "misc"
+
+  outdir_subpaths:
+    - "MarPPSS"
+
+  # prep_data shared values
+  PPfreq: [0.1667, 0.3571]
+  SSfreq: [0.1667, 0.3571]
+  cutwin: [-60, 60]
+  rotated: true
+
+  useCD: false
+
   HRange: [15.0, 30.0]
   wRange: [0.5, 1.5]
-  vRange: [1.5, 5.84]
-  logeRange: [0., 2.]
+  vRange: [1.8, 5.0]
+  logeRange: [0., 3.]
   rhoRange: [1.6, 2.0]
 
   fitLoge: true
@@ -24,30 +38,17 @@ common:
 
 experiments:
 
-  # - event_name: "S0976a_src3s"
-  #   mode: 2                   # 1=PP, 2=SS, 3=joint
-  #   rayp: 0.1712
-  #   maxN: 1
-  #   fitRange: [10, 30]
-  #   runname: "run_8c_maxN1_HRange_15_30_fitRange_10_30"
-
-  # - event_name: "S0976a_src4s"
-  #   mode: 2                   # 1=PP, 2=SS, 3=joint
-  #   rayp: 0.1712
-  #   maxN: 1
-  #   fitRange: [10, 30]
-  #   runname: "run_8c_maxN1_HRange_15_30_fitRange_10_30"
-  
-  - event_name: "S0976a_src4s"
-    mode: 3                   # 1=PP, 2=SS, 3=joint
+  - event_name: "S0976a_src4s" # name of the result dir
+    evname: "S0976a" # name of event in raw data dir
+    dtype: "DISP"
+    src_sigma: 4.0
+    
+    mode: 3                      # 1=PP, 2=SS, 3=joint
     rayp: [0.0818, 0.1712]
     maxN: 1
     fitRange: [5, 15, 10, 30]
-    runname: "run2_8c_maxN1_loge_joint"
-  
-  - event_name: "S0976a_src3s"
-    mode: 3                   # 1=PP, 2=SS, 3=joint
-    rayp: [0.0818, 0.1712]
-    maxN: 1
-    fitRange: [5, 15, 10, 30]
-    runname: "run2_8c_maxN1_loge_joint"
+    runname: "run3_8c_maxN1_joint"
+    
+    PParr: "2021-08-25T03:49:13"
+    SSarr: "2021-08-25T04:03:16"
+    baz: 101.8
