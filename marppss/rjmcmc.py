@@ -134,12 +134,13 @@ def birth(model, prior, rayp):
     # Sample new H, w, rho from priors
     newH = np.random.uniform(prior.HRange[0], prior.HRange[1])
     neww = np.random.uniform(prior.wRange[0], prior.wRange[1])
+    neww2 = np.random.uniform(prior.wRange[0], prior.wRange[1])
     newrho = np.random.uniform(prior.rhoRange[0], prior.rhoRange[1])
 
     # Determine admissible velocity interval for strictly increasing v
     v_min, v_max = prior.vRange[0], prior.vRange[1]
     if k > 0: v_min = max(v_min, model_new.v[k - 1])
-    if k < N: v_max = min(v_max, model_new.v[k])
+    if k <= N: v_max = min(v_max, model_new.v[k])
 
 
     if v_min >= v_max:
@@ -150,6 +151,7 @@ def birth(model, prior, rayp):
     # Update model_new
     model_new.H   = np.insert(model_new.H,   k, newH)
     model_new.w   = np.insert(model_new.w,   k, neww)
+    model_new.w2  = np.insert(model_new.w2,  k, neww2)
     model_new.v   = np.insert(model_new.v,   k, newv)
     model_new.rho = np.insert(model_new.rho, k, newrho)
     model_new.Nlayer = N + 1
@@ -164,9 +166,10 @@ def death(model, prior, rayp):
     if model_new.Nlayer > 1:
         idx = np.random.randint(model_new.Nlayer)
         model_new.Nlayer -= 1
-        model_new.H = np.delete(model_new.H, idx)
-        model_new.w = np.delete(model_new.w, idx)
-        model_new.v = np.delete(model_new.v, idx)
+        model_new.H   = np.delete(model_new.H, idx)
+        model_new.w   = np.delete(model_new.w, idx)
+        model_new.w2  = np.delete(model_new.w2, idx)
+        model_new.v   = np.delete(model_new.v, idx)
         model_new.rho = np.delete(model_new.rho, idx)
         # Check model
         success = check_model(model_new, prior, rayp)

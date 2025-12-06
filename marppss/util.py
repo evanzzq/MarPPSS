@@ -88,6 +88,10 @@ def check_model(model, prior, rayp):
     H = np.asarray(model.H, dtype=float)
     v = np.asarray(model.v[:-1], dtype=float)
 
+    # Strictly increasing velocity
+    if not np.all(np.diff(model.v) >= 0.0):
+        return False
+
     if len(rayp) == 1:
         # mode 1/2
         tau = 2.0 * H * np.sqrt(1.0 / (v**2) - rayp**2)
@@ -96,9 +100,10 @@ def check_model(model, prior, rayp):
         tau = 2.0 * H * np.sqrt(1.0 / (v**2) - rayp[1]**2)
     
     arr = np.cumsum(tau)
-    if arr[-1] < prior.tlen:
-        return True
-    return False
+    if arr[-1] >= prior.tlen:
+        return False
+    
+    return True
 
 def prepare_experiment(exp_vars):
     """
@@ -110,12 +115,11 @@ def prepare_experiment(exp_vars):
     from marppss.model import Prior, Bookkeeping
 
     filedir   = exp_vars["outdir"]
-    event_name = exp_vars["event_name"]
     mode = exp_vars["mode"]
     runname   = exp_vars["runname"]
 
-    PPdir = event_name + "_PP"
-    SSdir = event_name + "_SS"
+    PPdir = exp_vars["PP_dir"]
+    SSdir = exp_vars["SS_dir"]
 
     CDinv, CDinv_PP, CDinv_SS = None, None, None
 
@@ -330,10 +334,13 @@ def prep_data(
     dt = st_z.stats.delta
 
     # Bandpass
-    st_z_filt = st_z.copy().filter("bandpass", freqmin=PPfreq[0], freqmax=PPfreq[1],
-                                   corners=2, zerophase=True)
-    st_t_filt = st_t.copy().filter("bandpass", freqmin=SSfreq[0], freqmax=SSfreq[1],
-                                   corners=2, zerophase=True)
+    if PPfreq is not None and SSfreq is not None:
+        st_z_filt = st_z.copy().filter("bandpass", freqmin=PPfreq[0], freqmax=PPfreq[1],
+                                    corners=2, zerophase=True)
+        st_t_filt = st_t.copy().filter("bandpass", freqmin=SSfreq[0], freqmax=SSfreq[1],
+                                    corners=2, zerophase=True)
+    else:
+        st_z_filt, st_t_filt = st_z.copy(), st_t.copy()
 
     # Times (seconds from start_time)
     t_z = st_z_filt.times()
@@ -433,61 +440,61 @@ def prep_data(
     # 8. Quick QC plots
     # -------------------------
 
-    # --- random noise segments for the time window ---
-    def random_noise_segment(noise_full, segment_len):
-        n_total = len(noise_full)
-        if segment_len > n_total:
-            raise ValueError("Segment length is longer than noise trace")
-        start_idx = np.random.randint(0, n_total - segment_len + 1)
-        return noise_full[start_idx:start_idx + segment_len]
+    # # --- random noise segments for the time window ---
+    # def random_noise_segment(noise_full, segment_len):
+    #     n_total = len(noise_full)
+    #     if segment_len > n_total:
+    #         raise ValueError("Segment length is longer than noise trace")
+    #     start_idx = np.random.randint(0, n_total - segment_len + 1)
+    #     return noise_full[start_idx:start_idx + segment_len]
 
-    noise_z_segment = random_noise_segment(noise_z_full, len(time))
-    noise_t_segment = random_noise_segment(noise_t_full, len(time))
+    # noise_z_segment = random_noise_segment(noise_z_full, len(time))
+    # noise_t_segment = random_noise_segment(noise_t_full, len(time))
 
-    # (a) Data / reference / noise
-    plt.figure(figsize=(12, 8))
+    # # (a) Data / reference / noise
+    # plt.figure(figsize=(12, 8))
 
-    plt.subplot(2, 1, 1)
-    plt.plot(time, D_z, label="D (filtered data)", color="gray")
-    plt.plot(time, P_z, label="P (Gaussian reference)", color="black", linestyle="--")
-    plt.plot(time, noise_z_segment, label="Noise (random segment)", color="red", alpha=0.7)
-    plt.title("Z Component: Filtered Data, Reference, and Noise")
-    plt.ylabel("Amplitude")
-    plt.legend()
-    plt.grid()
+    # plt.subplot(2, 1, 1)
+    # plt.plot(time, D_z, label="D (filtered data)", color="gray")
+    # plt.plot(time, P_z, label="P (Gaussian reference)", color="black", linestyle="--")
+    # plt.plot(time, noise_z_segment, label="Noise (random segment)", color="red", alpha=0.7)
+    # plt.title("Z Component: Filtered Data, Reference, and Noise")
+    # plt.ylabel("Amplitude")
+    # plt.legend()
+    # plt.grid()
 
-    plt.subplot(2, 1, 2)
-    plt.plot(time, D_t, label="D (filtered data)", color="gray")
-    plt.plot(time, P_t, label="P (Gaussian reference)", color="black", linestyle="--")
-    plt.plot(time, noise_t_segment, label="Noise (random segment)", color="red", alpha=0.7)
-    plt.title("T Component: Filtered Data, Reference, and Noise")
-    plt.xlabel("Time (s)")
-    plt.ylabel("Amplitude")
-    plt.legend()
-    plt.grid()
+    # plt.subplot(2, 1, 2)
+    # plt.plot(time, D_t, label="D (filtered data)", color="gray")
+    # plt.plot(time, P_t, label="P (Gaussian reference)", color="black", linestyle="--")
+    # plt.plot(time, noise_t_segment, label="Noise (random segment)", color="red", alpha=0.7)
+    # plt.title("T Component: Filtered Data, Reference, and Noise")
+    # plt.xlabel("Time (s)")
+    # plt.ylabel("Amplitude")
+    # plt.legend()
+    # plt.grid()
 
-    plt.tight_layout()
-    plt.show(block=False)
-    plt.pause(0.1)
+    # plt.tight_layout()
+    # plt.show(block=False)
+    # plt.pause(0.1)
 
-    # (b) Covariance matrices (if fit succeeded)
-    if (CD_z is not None) and (CD_t is not None):
-        plt.figure(figsize=(12, 5))
+    # # (b) Covariance matrices (if fit succeeded)
+    # if (CD_z is not None) and (CD_t is not None):
+    #     plt.figure(figsize=(12, 5))
 
-        plt.subplot(1, 2, 1)
-        plt.imshow(CD_z, origin="lower", cmap="viridis", aspect="auto")
-        plt.colorbar(label="Covariance")
-        plt.title("Covariance Matrix: Z Component")
-        plt.xlabel("Sample index")
-        plt.ylabel("Sample index")
+    #     plt.subplot(1, 2, 1)
+    #     plt.imshow(CD_z, origin="lower", cmap="viridis", aspect="auto")
+    #     plt.colorbar(label="Covariance")
+    #     plt.title("Covariance Matrix: Z Component")
+    #     plt.xlabel("Sample index")
+    #     plt.ylabel("Sample index")
 
-        plt.subplot(1, 2, 2)
-        plt.imshow(CD_t, origin="lower", cmap="viridis", aspect="auto")
-        plt.colorbar(label="Covariance")
-        plt.title("Covariance Matrix: T Component")
-        plt.xlabel("Sample index")
-        plt.ylabel("Sample index")
+    #     plt.subplot(1, 2, 2)
+    #     plt.imshow(CD_t, origin="lower", cmap="viridis", aspect="auto")
+    #     plt.colorbar(label="Covariance")
+    #     plt.title("Covariance Matrix: T Component")
+    #     plt.xlabel("Sample index")
+    #     plt.ylabel("Sample index")
 
-        plt.tight_layout()
-        plt.show(block=False)
-        plt.pause(0.1)
+    #     plt.tight_layout()
+    #     plt.show(block=False)
+    #     plt.pause(0.1)

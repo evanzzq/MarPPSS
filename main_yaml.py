@@ -43,7 +43,6 @@ if __name__ == "__main__":
     experiments = config.get("experiments", [])
 
     for exp_idx, exp_cfg in enumerate(experiments):
-        print(f"\n=== Running experiment {exp_idx+1}/{len(experiments)}: {exp_cfg['event_name']} ===")
 
         # merge common and experiment
         exp_vars = {**common_cfg, **exp_cfg}
@@ -57,8 +56,14 @@ if __name__ == "__main__":
             data_type = "joint"
         else:
             raise ValueError(f"Unknown mode: {exp_vars['mode']}")
+        
+        evname = exp_vars.get("evname")
+        src_sigma = float(exp_vars["src_sigma"])
+        save_suffix = f"_src_{src_sigma:.1f}_s"
 
-        exp_vars["modname"] = exp_vars["event_name"] + "_" + data_type
+        exp_vars["modname"] = evname + save_suffix + "_" + data_type
+
+        print(f"\n=== Running experiment {exp_idx+1}/{len(experiments)}: {exp_vars['modname']} ===")
 
         # ---- Prepare data using prep_data ----
         #
@@ -73,10 +78,11 @@ if __name__ == "__main__":
         SSarr = UTCDateTime(exp_vars["SSarr"])
 
         # make sure these are tuples/lists of floats
-        PPfreq = tuple(exp_vars["PPfreq"])
-        SSfreq = tuple(exp_vars["SSfreq"])
+        # in case of using pzfiltered data, do not bandpass (already bandpassed)
+        PPfreq = tuple(exp_vars["PPfreq"]) if "PPfreq" in exp_vars else None
+        SSfreq = tuple(exp_vars["SSfreq"]) if "SSfreq" in exp_vars else None
+
         cutwin = tuple(exp_vars["cutwin"])
-        src_sigma = float(exp_vars["src_sigma"])
 
         rotated = exp_vars.get("rotated", True)
         baz = exp_vars.get("baz", None)
@@ -103,15 +109,15 @@ if __name__ == "__main__":
         print("datadir:", datadir)
         print("outdir :", outdir)
 
-        # if evname not explicitly given, default to event_name
-        evname = exp_vars.get("evname", exp_vars["event_name"])
-
         # ----------------------------------------------------------
         # Check whether data is already prepared -> skip prep_data()
         # ----------------------------------------------------------
-        save_suffix = f"_src_{src_sigma:.1f}_s"
+
         PP_dir = os.path.join(exp_vars["outdir"], "data", evname + save_suffix + "_PP")
         SS_dir = os.path.join(exp_vars["outdir"], "data", evname + save_suffix + "_SS")
+
+        exp_vars["PP_dir"] = PP_dir
+        exp_vars["SS_dir"] = SS_dir
 
         PP_data_file = os.path.join(PP_dir, "data.npz")
         SS_data_file = os.path.join(SS_dir, "data.npz")
@@ -181,4 +187,4 @@ if __name__ == "__main__":
                 pool.starmap(run_chain, [(cid, exp_vars) for cid in batch_chain_ids])
 
         end = pytime.time()
-        print(f"Experiment {exp_vars['event_name']} finished in {end - start:.2f} seconds")
+        print(f"Experiment {exp_vars['modname']} finished in {end - start:.2f} seconds")
