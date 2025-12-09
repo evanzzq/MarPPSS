@@ -126,7 +126,11 @@ def calc_like_prob_gv(model, bookkeeping):
     periods = np.array([18.9, 28.86]) 
     gv_obs = np.array([2.726, 2.829]) # S1000a group velocities
     sigma_gv = 0.01
-    vpvsr = 1.8 # fixed vp/vs ratio for mode 1/2
+
+    if bookkeeping.fitrho or bookkeeping.mode == 3:
+        vpvsr = model.rho
+    else:
+        vpvsr = 1.8
 
     # define model for pysurf96 input
     H = np.append(model.H, 0)
@@ -138,8 +142,8 @@ def calc_like_prob_gv(model, bookkeeping):
         vp = vs * vpvsr
     if bookkeeping.mode == 3:
         vs = model.v
-        vp = model.v * model.rho
-    rho = vs* 0.8
+        vp = model.v * vpvsr
+    rho = vs* 0.8 # density
 
     # call pysurf96
     gv_model = surf96(
@@ -159,37 +163,95 @@ def calc_like_prob_gv(model, bookkeeping):
     
     return logL_gv
 
+import copy
+import numpy as np
+
 def birth(model, prior, rayp):
+    """
+    Birth move with H as depths (monotonically increasing).
+
+    model.H: shape (Nlayer,) depths of discontinuities (increasing)
+    model.v: shape (Nlayer+1,) layer velocities incl. half-space
+
+    We:
+      - choose an insertion index k in [0, Nlayer]
+      - draw newH uniformly between neighboring depths:
+            k = 0:   [prior.HRange[0], H[0]]
+            0<k<N:   [H[k-1], H[k]]
+            k = N:   [H[N-1], prior.HRange[1]]
+      - draw new v, w, w2, rho as before, with v strictly increasing.
+    """
 
     # Don't update if already reaching maxN
     if model.Nlayer >= prior.maxN:
         return model, False
-    
-    # Make a copy
+
     model_new = copy.deepcopy(model)
 
-    # Randomly choose a layer to insert
-    N = model_new.Nlayer
+    N = model_new.Nlayer  # number of existing discontinuities (len(H))
+
+    # Choose insertion index k ∈ {0, ..., N}
+    # Insert before existing index k (k==N means append at end)
     k = np.random.randint(0, N + 1)
 
-    # Sample new H, w, rho from priors
-    newH = np.random.uniform(prior.HRange[0], prior.HRange[1])
-    neww = np.random.uniform(prior.wRange[0], prior.wRange[1])
-    neww2 = np.random.uniform(prior.wRange[0], prior.wRange[1])
+    # -----------------------------
+    # 1. Sample new depth (H as depth)
+    # -----------------------------
+    H_min_global, H_max_global = prior.HRange
+
+    if N == 0:
+        # No existing discontinuities: just draw anywhere in global range
+        H_low, H_high = H_min_global, H_max_global
+
+    else:
+        if k == 0:
+            # Insert at top: between global min and first discontinuity
+            H_low  = H_min_global
+            H_high = model_new.H[0]
+        elif k == N:
+            # Insert at bottom: between last discontinuity and global max
+            H_low  = model_new.H[-1]
+            H_high = H_max_global
+        else:
+            # Insert between two existing depths
+            H_low  = model_new.H[k - 1]
+            H_high = model_new.H[k]
+
+    # If the bracket is invalid, reject
+    if H_low >= H_high:
+        return model, False
+
+    newH = np.random.uniform(H_low, H_high)
+
+    # -----------------------------
+    # 2. Sample new w, w2, and rho
+    # -----------------------------
+    neww   = np.random.uniform(prior.wRange[0],   prior.wRange[1])
+    neww2  = np.random.uniform(prior.wRange[0],   prior.wRange[1])
     newrho = np.random.uniform(prior.rhoRange[0], prior.rhoRange[1])
 
-    # Determine admissible velocity interval for strictly increasing v
+    # -----------------------------
+    # 3. Sample new v, enforcing strictly increasing velocity
+    # -----------------------------
     v_min, v_max = prior.vRange[0], prior.vRange[1]
-    if k > 0: v_min = max(v_min, model_new.v[k - 1])
-    if k <= N: v_max = min(v_max, model_new.v[k])
 
+    # lower bound: previous layer velocity
+    if k > 0:
+        v_min = max(v_min, model_new.v[k - 1])
+
+    # upper bound: next layer or half-space (index N)
+    # v has length N+1, so v[k] exists for k in [0, N]
+    if k <= N:
+        v_max = min(v_max, model_new.v[k])
 
     if v_min >= v_max:
         return model, False
 
     newv = np.random.uniform(v_min, v_max)
 
-    # Update model_new
+    # -----------------------------
+    # 4. Insert into model arrays
+    # -----------------------------
     model_new.H   = np.insert(model_new.H,   k, newH)
     model_new.w   = np.insert(model_new.w,   k, neww)
     model_new.w2  = np.insert(model_new.w2,  k, neww2)
@@ -197,10 +259,12 @@ def birth(model, prior, rayp):
     model_new.rho = np.insert(model_new.rho, k, newrho)
     model_new.Nlayer = N + 1
 
+    # Final consistency check (including monotonic H & v)
     success = check_model(model_new, prior, rayp)
     if success:
         return model_new, True
     return model, False
+
 
 def death(model, prior, rayp):
     model_new = copy.deepcopy(model)
@@ -221,13 +285,40 @@ def death(model, prior, rayp):
 def update_H(model, prior, rayp):
     # Copy model
     model_new = copy.deepcopy(model)
-    # Select a layer and update
-    idx = np.random.randint(model_new.Nlayer)
-    model_new.H[idx] += prior.HStd * np.random.randn()
-    # Check range
-    if not (prior.HRange[0] <= model_new.H[idx] <= prior.HRange[1]):
+    N = model_new.Nlayer
+
+    if N == 0:
+        # No discontinuities to move
         return model, False
-    # Check model
+
+    # Select a discontinuity index to update
+    idx = np.random.randint(0, N)
+
+    # Work with a copy of the current depths
+    H_old = model_new.H.copy()
+
+    # Propose new depth with a Gaussian step
+    newH = H_old[idx] + prior.HStd * np.random.randn()
+
+    # Determine admissible interval based on neighbors + global HRange
+    H_min, H_max = prior.HRange  # global bounds
+
+    if N > 1:
+        if idx > 0:
+            # lower neighbor
+            H_min = max(H_min, H_old[idx - 1])
+        if idx < N - 1:
+            # upper neighbor
+            H_max = min(H_max, H_old[idx + 1])
+
+    # If the bracket is invalid or proposal outside allowed range, reject
+    if not (H_min < newH < H_max):
+        return model, False
+
+    # Accept proposed depth
+    model_new.H[idx] = newH
+
+    # Final consistency check (monotonicity etc.)
     success = check_model(model_new, prior, rayp)
     if success:
         return model_new, True
@@ -374,11 +465,12 @@ def rjmcmc_run(P, D, prior, bookkeeping, saveDir, CDinv=None):
     # Action pool
     actionPool = [2,3,8] # H, w, v
     if prior.maxN > 1: actionPool = np.append(actionPool, [0,1]) # birth, death
-    if bookkeeping.mode == 3: actionPool = np.append(actionPool, [4,9]) # w2, rho
+    if bookkeeping.mode == 3: actionPool = np.append(actionPool, [4]) # w2
+    if bookkeeping.mode == 3 or (bookkeeping.fitgv and bookkeeping.fitrho): actionPool = np.append(actionPool, [9]) # rho
     if bookkeeping.fitLoge:
-        if bookkeeping.mode in [1, 2]: actionPool = np.append(actionPool, [5])
-        if bookkeeping.mode == 3: actionPool = np.append(actionPool, [5,6])
-    if bookkeeping.fitgv: actionPool = np.append(actionPool, [7])
+        if bookkeeping.mode in [1, 2]: actionPool = np.append(actionPool, [5]) # loge
+        if bookkeeping.mode == 3: actionPool = np.append(actionPool, [5,6]) # loge and loge2
+    if bookkeeping.fitgv: actionPool = np.append(actionPool, [7]) # loge_gv
 
     for iStep in range(totalSteps):
 

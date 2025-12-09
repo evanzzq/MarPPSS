@@ -3,21 +3,31 @@ import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
 from marppss.forward import create_D_from_model
 
-def _model_to_step_profile(H, v, halfspace_extra=20.0):
+def _model_to_step_profile(H, v, HRange):
     """
     Convert one model (H, v) to (vx, z) for plotting v vs depth
     with step-like layers.
 
-    Convention:
-      - H: array of length Nlayer (thickness of each layer, km)
-      - v: array of length Nlayer+1 (velocity at each node)
-        Example: H=[10,20,30], v=[3,4,5,6]
+    Convention (new):
+      - H: array of length Nlayer (depths of discontinuities, km; increasing)
+      - v: array of length Nlayer+1 (velocity in each layer, incl. half-space)
+      - HRange: [H_min, H_max] prior range for discontinuity depths.
+        We only plot down to H_max.
 
-    x-axis: velocity
-    y-axis: depth (positive downward).
+    Layers:
+      Layer 0:   0       - H[0]   -> v[0]
+      Layer 1:   H[0]    - H[1]   -> v[1]
+      ...
+      Layer N-1: H[N-2]  - H[N-1] -> v[N-1]
+      Half-space: H[N-1] - HRange[1] -> v[N] (clipped at HRange[1])
+
+    Returns
+    -------
+    vx, z : 1D arrays for step-plot (velocity vs depth).
     """
     H = np.asarray(H, dtype=float)
     v = np.asarray(v, dtype=float)
+    H_min, H_max = HRange
 
     Nlayer = H.size
 
@@ -26,17 +36,13 @@ def _model_to_step_profile(H, v, halfspace_extra=20.0):
             f"Expected len(v) = Nlayer + 1; got len(v)={v.size}, Nlayer={Nlayer}"
         )
 
-    # depths at each node: 0, H0, H0+H1, ...
-    depth_nodes = np.concatenate(([0.0], np.cumsum(H)))  # length Nlayer+1
-    depth_bottom = depth_nodes[-1]
-    depth_half = depth_bottom + halfspace_extra
+    # Depth nodes at tops of layers: [0, H[0], H[1], ..., H[N-1]]
+    depth_nodes = np.concatenate(([0.0], H))  # length Nlayer+1
 
     vx_list = []
     z_list = []
 
-    # For each layer i = 0..Nlayer-1:
-    #   vertical: (v[i], depth_nodes[i])   -> (v[i], depth_nodes[i+1])
-    #   horizontal at interface: (v[i], depth_nodes[i+1]) -> (v[i+1], depth_nodes[i+1])
+    # Finite layers
     for i in range(Nlayer):
         v_i   = v[i]
         v_ip1 = v[i + 1]
@@ -47,53 +53,64 @@ def _model_to_step_profile(H, v, halfspace_extra=20.0):
         vx_list.extend([v_i, v_i])
         z_list.extend([z_top, z_bot])
 
-        # horizontal segment at interface
+        # horizontal jump at interface
         vx_list.extend([v_i, v_ip1])
         z_list.extend([z_bot, z_bot])
 
-    # Half-space vertical extension at v[-1]
-    vx_list.extend([v[-1], v[-1]])
-    z_list.extend([depth_bottom, depth_half])
+    # Half-space: from last discontinuity down to H_max (if deeper)
+    depth_bottom = depth_nodes[-1]
+    if depth_bottom < H_max:
+        vx_list.extend([v[-1], v[-1]])
+        z_list.extend([depth_bottom, H_max])
 
     return np.array(vx_list), np.array(z_list)
 
+from matplotlib.lines import Line2D
+import matplotlib.pyplot as plt
+import numpy as np
 
 def plot_velocity_ensemble(models,
                            mode,
-                           halfspace_extra=20.0,
+                           HRange,
                            alpha=0.1,
-                           linewidth=1.0,
-                           depthlim=50.0):
+                           linewidth=1.0):
     """
     Plot an ensemble of velocity models (v vs depth) as step profiles.
+
+    New convention:
+    --------------
+    For all modes:
+        model.H : depths of discontinuities, shape (Nlayer,),
+                  strictly increasing, within HRange.
+        model.v : velocities per layer, shape (Nlayer+1,),
+                  last entry is half-space velocity.
+
+    mode:
+        1 or 2 -> single-velocity ensemble using model.v
+        3      -> Vs and Vp ensembles (Vs from model.v, Vp = Vs * model.rho)
 
     Parameters
     ----------
     models : list of Model
-        Each Model has (Nlayer, H, v, rho).
-        - For mode in [1, 2]: H = thickness, v = velocity.
-        - For mode == 3:
-            H   = thickness (km)
-            v   = Vs
-            rho = Vp/Vs ratio  (so Vp = Vs * rho)
     mode : int
-        1 or 2 -> plot single-velocity ensemble using model.v
-        3      -> plot Vs and Vp ensembles (Vs from model.v, Vp = Vs * model.rho)
-    halfspace_extra : float
-        Extra depth (km) to extend the last layer as a half-space.
+        1 or 2: plot single velocity field in model.v
+        3     : plot Vs and Vp (Vp = Vs * rho)
+    HRange : (float, float)
+        [H_min, H_max] prior range for discontinuity depths.
+        Plot will be limited to 0 .. H_max.
     alpha : float
         Transparency for individual profiles.
     linewidth : float
         Line width for individual profiles.
-    depthlim : float
-        Maximum depth to show (km); plot is from 0 to depthlim.
     """
+    H_min, H_max = HRange
+
     fig, ax = plt.subplots(figsize=(5, 7))
 
     if mode in (1, 2):
-        # Original behavior: single velocity field in model.v
+        # Single-velocity ensemble
         for m in models:
-            vx, z = _model_to_step_profile(m.H, m.v, halfspace_extra=halfspace_extra)
+            vx, z = _model_to_step_profile(m.H, m.v, HRange)
             ax.plot(vx, z, color="C0", alpha=alpha, linewidth=linewidth)
 
         ax.set_title("Velocity ensemble")
@@ -101,7 +118,7 @@ def plot_velocity_ensemble(models,
         ax.legend(handles=legend_handles, loc="lower right")
 
     elif mode == 3:
-        # Vs and Vp ensemble
+        # Vs and Vp ensemble (mode 3: v = Vs, rho = Vp/Vs)
         first_vs = True
         first_vp = True
 
@@ -111,7 +128,7 @@ def plot_velocity_ensemble(models,
             vp = vs * ratio
 
             # Vs profile
-            vx_vs, z_vs = _model_to_step_profile(m.H, vs, halfspace_extra=halfspace_extra)
+            vx_vs, z_vs = _model_to_step_profile(m.H, vs, HRange)
             ax.plot(vx_vs, z_vs,
                     color="C0",
                     alpha=alpha,
@@ -120,7 +137,7 @@ def plot_velocity_ensemble(models,
             first_vs = False
 
             # Vp profile
-            vx_vp, z_vp = _model_to_step_profile(m.H, vp, halfspace_extra=halfspace_extra)
+            vx_vp, z_vp = _model_to_step_profile(m.H, vp, HRange)
             ax.plot(vx_vp, z_vp,
                     color="C1",
                     alpha=alpha,
@@ -137,15 +154,170 @@ def plot_velocity_ensemble(models,
     ax.set_xlabel("Velocity (km/s)")
     ax.set_ylabel("Depth (km)")
 
-    if depthlim:
-        ax.set_ylim(depthlim, 0)  # depth increasing downward
-    else:
-        ax.set_ylim(ax.get_ylim()[::-1])
+    # Always plot within HRange: from 0 down to H_max
+    ax.set_ylim(H_max, 0.0)   # depth increasing downward
 
     ax.grid(alpha=0.3)
+    plt.tight_layout()
+    plt.show()
+
+    return fig, ax
+
+import numpy as np
+import matplotlib.pyplot as plt
+
+try:
+    from scipy.ndimage import gaussian_filter
+    _HAVE_SCIPY = True
+except ImportError:
+    _HAVE_SCIPY = False
+
+
+def build_velocity_heatmap_from_step(models,
+                                     HRange,
+                                     nbins_z=200,
+                                     nbins_v=80,
+                                     row_normalized=True):
+    """
+    Build a 2D histogram (depth × velocity) directly from the step
+    profiles produced by _model_to_step_profile.
+
+    Returns
+    -------
+    z_centers : (nbins_z,) depth bin centers
+    v_centers : (nbins_v,) velocity bin centers
+    H2        : (nbins_z, nbins_v) histogram (row-normalized if requested)
+    """
+    H_min, H_max = HRange
+
+    # --- 1. Collect all (v, z) points from step profiles ---
+    all_v = []
+    all_z = []
+
+    for m in models:
+        vx, z = _model_to_step_profile(m.H, m.v, HRange)
+        mask = (z >= H_min) & (z <= H_max)
+        all_v.append(vx[mask])
+        all_z.append(z[mask])
+
+    all_v = np.concatenate(all_v)
+    all_z = np.concatenate(all_z)
+
+    # --- 2. Define bin edges ---
+    vmin = float(all_v.min())
+    vmax = float(all_v.max())
+    if vmin == vmax:
+        delta = 0.05 * (abs(vmin) if vmin != 0 else 1.0)
+        vmin -= delta
+        vmax += delta
+
+    z_edges = np.linspace(H_min, H_max, nbins_z + 1)
+    v_edges = np.linspace(vmin, vmax, nbins_v + 1)
+
+    # --- 3. 2D histogram: x = v, y = z ---
+    H2, v_edges_out, z_edges_out = np.histogram2d(
+        all_v, all_z, bins=[v_edges, z_edges]
+    )
+
+    # shape → (nz, nv): rows = depth, cols = velocity
+    H2 = H2.T
+
+    # --- 4. Row normalization (posterior PDF at each depth) ---
+    if row_normalized:
+        row_sums = H2.sum(axis=1, keepdims=True)
+        row_sums[row_sums == 0] = 1.0
+        H2 = H2 / row_sums
+    else:
+        if H2.max() > 0:
+            H2 = H2 / H2.max()
+
+    # Bin centers
+    z_centers = 0.5 * (z_edges_out[:-1] + z_edges_out[1:])
+    v_centers = 0.5 * (v_edges_out[:-1] + v_edges_out[1:])
+
+    return z_centers, v_centers, H2
+
+def plot_velocity_heatmap_from_step(models,
+                                    HRange,
+                                    nbins_z=200,
+                                    nbins_v=80,
+                                    cmap="magma",
+                                    row_normalized=True,
+                                    overlay_median=True,
+                                    smooth_sigma_depth=1.0,
+                                    smooth_sigma_vel=1.0):
+    """
+    Nicer-looking posterior v(z) heatmap based on step profiles.
+
+    - Uses your _model_to_step_profile (same as spaghetti)
+    - Row-normalized so each depth row is a PDF
+    - Optional Gaussian smoothing in (depth, velocity) directions
+    - Overlays median v(z) curve
+    """
+    H_min, H_max = HRange
+
+    z, v_centers, H2 = build_velocity_heatmap_from_step(
+        models,
+        HRange,
+        nbins_z=nbins_z,
+        nbins_v=nbins_v,
+        row_normalized=row_normalized,
+    )
+
+    # --- Optional smoothing ---
+    if _HAVE_SCIPY and (smooth_sigma_depth > 0 or smooth_sigma_vel > 0):
+        sigma = (smooth_sigma_depth, smooth_sigma_vel)
+        H2_smooth = gaussian_filter(H2, sigma=sigma)
+    else:
+        H2_smooth = H2
+
+    # Optionally go to log space to enhance low values
+    eps = 1e-6
+    H2_plot = np.log10(H2_smooth + eps)
+    vmin = H2_plot.max() - 2.0  # show ~2 orders of magnitude
+    vmax = H2_plot.max()
+
+    fig, ax = plt.subplots(figsize=(6, 7))
+
+    im = ax.imshow(
+        H2_plot,
+        origin="upper",
+        aspect="auto",
+        extent=[v_centers[0], v_centers[-1], z[-1], z[0]],
+        cmap=cmap,
+        vmin=vmin,
+        vmax=vmax,
+        interpolation="bilinear",   # smoother appearance
+    )
+
+    cbar_label = "log10 Posterior PDF at each depth" if row_normalized else "log10 Counts"
+    cbar = plt.colorbar(im, ax=ax, label=cbar_label)
+
+    # --- Overlay median profile (sampled smoothly in depth) ---
+    if overlay_median:
+        nz_med = 400
+        z_grid = np.linspace(H_min, H_max, nz_med)
+        v_profiles = []
+
+        for m in models:
+            vx, z_step = _model_to_step_profile(m.H, m.v, HRange)
+            v_on_grid = np.interp(z_grid, z_step, vx)
+            v_profiles.append(v_on_grid)
+
+        v_profiles = np.vstack(v_profiles)
+        median_v = np.median(v_profiles, axis=0)
+        ax.plot(median_v, z_grid, color="cyan", lw=2, label="Median v(z)")
+        ax.legend(loc="lower right")
+
+    ax.set_xlabel("Velocity (km/s)")
+    ax.set_ylabel("Depth (km)")
+    ax.set_ylim(H_max, H_min)  # depth increasing downward
+    ax.set_title("Posterior Velocity Structure (smoothed density)")
+    ax.grid(alpha=0.15, linestyle=":")
 
     plt.tight_layout()
     plt.show()
+
     return fig, ax
 
 def plot_predicted_vs_input(ensemble, P, D_obs, prior, bookkeeping):

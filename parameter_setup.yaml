@@ -15,7 +15,7 @@ common:
   rotated: true
 
   # prior ranges
-  HRange: [15.0, 30.0]
+  HRange: [1., 60.0]
   wRange: [0.5, 1.5]
   vRange: [4.0, 9.0]
   logeRange: [0., 10.]

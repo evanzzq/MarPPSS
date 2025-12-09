@@ -23,7 +23,7 @@ class Prior:
     maxN: int = 2
     dt: float = None
     tlen: float = None # half length in seconds
-    HRange: tuple = (1, 55)
+    HRange: tuple = (1, 60)
     wRange: tuple = (0.5, 1.5)
     logeRange: tuple = (0., 2.)
     vRange: tuple = (1.0, 5.0) # for mode 1/2 v is vp or vs respectively; for mode 3 v is vs, and vp = v * rho
@@ -51,7 +51,7 @@ class Model:
     # in mode 1/2 (PP/SS), v refers to vp or vs respectively, and rho is not used.
     # in mode 3, v refers to vs, and rho is vp/vs; i.e., vp = vs * rho.
     Nlayer: int
-    H: np.ndarray
+    H: np.ndarray # depth of discontinuities
     w: np.ndarray # stretch factor, same length as H
     w2: np.ndarray # in mode 3 (joint), w is for PP and w2 is for SS
     loge: float # relative error for mode 1/2

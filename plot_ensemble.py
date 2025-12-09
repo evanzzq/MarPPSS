@@ -2,7 +2,7 @@ import os
 import pickle
 import numpy as np
 import matplotlib.pyplot as plt
-from marppss.visualization import plot_velocity_ensemble, plot_predicted_vs_input, plot_posterior_error_params, plot_posterior_group_velocities
+from marppss.visualization import plot_velocity_ensemble, plot_velocity_heatmap_from_step, plot_predicted_vs_input, plot_posterior_error_params, plot_posterior_group_velocities
 
 # ==== Config ====
 # filedir = "H:/My Drive/Research/MarPPSS"
@@ -111,7 +111,7 @@ if multi_chain:
 
     # Sort chains by final logL (descending)
     chain_logLs.sort(key=lambda x: x[1], reverse=True)
-    print("Chains sorted by final logL:", chain_logLs)
+    # print("Chains sorted by final logL:", chain_logLs)
 
     # --- Plot histogram of final logL values ---
     plt.figure(figsize=(6, 4))
@@ -164,7 +164,10 @@ else:
 #                       PLOT RESULTS
 # -----------------------------------------------------------
 
-plot_velocity_ensemble(ensemble_all, mode)
+plot_velocity_ensemble(ensemble_all, mode, prior.HRange)
+plot_velocity_heatmap_from_step(ensemble_all, prior.HRange)
+
+
 plot_predicted_vs_input(ensemble_all, P, D, prior, bookkeeping)
 plot_posterior_error_params(ensemble, bookkeeping)
 

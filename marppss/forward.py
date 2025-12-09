@@ -105,7 +105,7 @@ def create_D_from_model(P: np.ndarray, model: Model, prior: Prior, bookkeeping: 
         
         # get arrival time(s)
         # for mode 1/2 (PP or SS), it doesn't matter if it's vp or vs
-        H = np.asarray(model.H, dtype=float)
+        H = np.diff(np.insert(model.H, 0, 0)) # depth to thickness
         v = np.asarray(model.v[:-1], dtype=float)
         # per-layer two-way time
         tau = 2.0 * H * np.sqrt(1.0 / (v**2) - bookkeeping.rayp**2)
@@ -190,7 +190,7 @@ def create_D_from_model(P: np.ndarray, model: Model, prior: Prior, bookkeeping: 
             amp_SS[k] = amp_SS[k-1] * (RssU / (TssU * TssD * RssU_all[k-1]))
 
         # get arrival time(s)
-        H = np.asarray(model.H, dtype=float)
+        H = np.diff(np.insert(model.H, 0, 0)) # depth to thickness
         vs = np.asarray(model.v[:-1], dtype=float)
         vp = np.asarray(model.v[:-1] * model.rho[:-1], dtype=float)
         # per-layer two-way time

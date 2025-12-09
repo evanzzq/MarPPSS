@@ -85,7 +85,7 @@ def SHmatrix(p, mi, mt):
 
 def check_model(model, prior, rayp):
 
-    H = np.asarray(model.H, dtype=float)
+    H = np.diff(np.insert(model.H, 0, 0)) # depth to thickness
     v = np.asarray(model.v[:-1], dtype=float)
 
     # Strictly increasing velocity
