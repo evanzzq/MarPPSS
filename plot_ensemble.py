@@ -2,19 +2,19 @@ import os
 import pickle
 import numpy as np
 import matplotlib.pyplot as plt
-from marppss.visualization import plot_velocity_ensemble, plot_predicted_vs_input
+from marppss.visualization import plot_velocity_ensemble, plot_predicted_vs_input, plot_posterior_error_params, plot_posterior_group_velocities
 
 # ==== Config ====
 # filedir = "H:/My Drive/Research/MarPPSS"
 filedir = "/Users/evanzhang/zzq@umd.edu - Google Drive/My Drive/Research/MarPPSS"
 
 # ---- User-defined experiment/run ----
-expname = "S1000a_pzfiltered_src_4.0_s_joint"   # folder under run/
-runname = "run1"                     # subfolder under that
+expname = "S1000a_src_2.0_s_PP"   # folder under run/
+runname = "run1_32c_maxN3_PP_gv"                     # subfolder under that
 
 # ---- Explicit data dirs (user-specified) ----
-PPdir = "S1000a_pzfiltered_src_4.0_s_PP"        # folder under data/
-SSdir = "S1000a_pzfiltered_src_4.0_s_SS"        # folder under data/
+PPdir = "S1000a_src_2.0_s_PP"        # folder under data/
+SSdir = "S1000a_src_2.0_s_SS"        # folder under data/
 
 PP_dir = os.path.join(filedir, "data", PPdir)
 SS_dir = os.path.join(filedir, "data", SSdir)
@@ -125,6 +125,7 @@ if multi_chain:
     plt.figure(figsize=(8, 5))
     for cid, vals in logL_series.items():
         plt.plot(range(len(vals)), vals, alpha=0.7, linewidth=0.2, color="black")
+    plt.xscale('log')
     plt.xlabel("Step")
     plt.ylabel("Log-likelihood")
     plt.title("Log-likelihood evolution for all chains")
@@ -165,3 +166,17 @@ else:
 
 plot_velocity_ensemble(ensemble_all, mode)
 plot_predicted_vs_input(ensemble_all, P, D, prior, bookkeeping)
+plot_posterior_error_params(ensemble, bookkeeping)
+
+# Group-velocity posteriors (using your S1000a values)
+periods = np.array([18.9, 28.86])
+gv_obs  = np.array([2.726, 2.829])
+
+if bookkeeping.fitgv:
+    plot_posterior_group_velocities(
+        ensemble,
+        bookkeeping,
+        periods=periods,
+        gv_true=gv_obs,
+        vpvsr=1.8
+    )

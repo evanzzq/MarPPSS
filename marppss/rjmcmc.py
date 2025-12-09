@@ -118,6 +118,47 @@ def calc_like_prob_joint(P_PP, P_SS, D_PP, D_SS,
     logL = logL_PP + logL_SS
     return logL, logL_PP, logL_SS
 
+def calc_like_prob_gv(model, bookkeeping):
+
+    from pysurf96 import surf96
+    
+    # edit these based on data
+    periods = np.array([18.9, 28.86]) 
+    gv_obs = np.array([2.726, 2.829]) # S1000a group velocities
+    sigma_gv = 0.01
+    vpvsr = 1.8 # fixed vp/vs ratio for mode 1/2
+
+    # define model for pysurf96 input
+    H = np.append(model.H, 0)
+    if bookkeeping.mode == 1: 
+        vp = model.v
+        vs = vp / vpvsr
+    if bookkeeping.mode == 2: 
+        vs = model.v
+        vp = vs * vpvsr
+    if bookkeeping.mode == 3:
+        vs = model.v
+        vp = model.v * model.rho
+    rho = vs* 0.8
+
+    # call pysurf96
+    gv_model = surf96(
+        H,
+        vp,
+        vs,
+        rho,
+        periods,
+        wave="rayleigh",
+        mode=1, # 1: fundamental, 2: second-mode, etc
+        velocity="group",
+        flat_earth=True)
+    
+    diff_gv = (gv_model - gv_obs)
+    sigma_gv *= np.exp(0.5 * model.loge_gv)
+    logL_gv = -0.5 * np.sum((diff_gv / sigma_gv) ** 2)
+    
+    return logL_gv
+
 def birth(model, prior, rayp):
 
     # Don't update if already reaching maxN
@@ -234,6 +275,16 @@ def update_loge2(model, prior):
         return model_new, True
     return model, False
 
+def update_loge_gv(model, prior):
+    # Copy model
+    model_new = copy.deepcopy(model)
+    # Update
+    model_new.loge_gv += prior.logeStd * np.random.randn()
+    # Check range and return
+    if prior.logeRange[0] <= model_new.loge_gv <= prior.logeRange[1]:
+        return model_new, True
+    return model, False
+
 def update_v(model, prior, rayp):
     # Copy model
     model_new = copy.deepcopy(model)
@@ -303,12 +354,14 @@ def rjmcmc_run(P, D, prior, bookkeeping, saveDir, CDinv=None):
     logL_trace = []
     if bookkeeping.mode in (1, 2):
         logL = calc_like_prob(P, D, model, prior, bookkeeping, CDinv=CDinv)
+        if bookkeeping.fitgv: logL += calc_like_prob_gv(model, bookkeeping)
         logL_trace.append(logL)
     elif bookkeeping.mode == 3:
         logL_PP_trace, logL_SS_trace = [], []
         logL, logL_PP, logL_SS = calc_like_prob_joint(
             P_PP, P_SS, D_PP, D_SS, 
             model, prior, bookkeeping, CDinv_PP=CDinv_PP, CDinv_SS=CDinv_SS)
+        if bookkeeping.fitgv: logL += calc_like_prob_gv(model, bookkeeping)
         logL_trace.append(logL)
         logL_PP_trace.append(logL_PP)
         logL_SS_trace.append(logL_SS)
@@ -319,12 +372,13 @@ def rjmcmc_run(P, D, prior, bookkeeping, saveDir, CDinv=None):
     ensemble = []
 
     # Action pool
-    actionPool = [2,3,7] # H, w, v
+    actionPool = [2,3,8] # H, w, v
     if prior.maxN > 1: actionPool = np.append(actionPool, [0,1]) # birth, death
-    if bookkeeping.mode == 3: actionPool = np.append(actionPool, [4,8]) # w2, rho
+    if bookkeeping.mode == 3: actionPool = np.append(actionPool, [4,9]) # w2, rho
     if bookkeeping.fitLoge:
         if bookkeeping.mode in [1, 2]: actionPool = np.append(actionPool, [5])
         if bookkeeping.mode == 3: actionPool = np.append(actionPool, [5,6])
+    if bookkeeping.fitgv: actionPool = np.append(actionPool, [7])
 
     for iStep in range(totalSteps):
 
@@ -347,8 +401,10 @@ def rjmcmc_run(P, D, prior, bookkeeping, saveDir, CDinv=None):
             elif action == 6:
                 model_new, _ = update_loge2(model_new, prior)
             elif action == 7:
-                model_new, _ = update_v(model_new, prior, bookkeeping.rayp)
+                model_new, _ = update_loge_gv(model_new, prior)
             elif action == 8:
+                model_new, _ = update_v(model_new, prior, bookkeeping.rayp)
+            elif action == 9:
                 model_new, _ = update_rho(model_new, prior, bookkeeping.rayp)
 
         # Compute likelihood
@@ -357,20 +413,25 @@ def rjmcmc_run(P, D, prior, bookkeeping, saveDir, CDinv=None):
         elif bookkeeping.mode == 3:
             new_logL, new_logL_PP, new_logL_SS = calc_like_prob_joint(
                 P_PP, P_SS, D_PP, D_SS, 
-                model_new, prior, bookkeeping, CDinv_PP=CDinv_PP, CDinv_SS=CDinv_SS)
+                model_new, prior, bookkeeping, CDinv_PP=CDinv_PP, CDinv_SS=CDinv_SS)      
+        if bookkeeping.fitgv: new_logL += calc_like_prob_gv(model_new, bookkeeping)
 
         # Acceptance probability
-        log_accept_ratio = (new_logL - logL) + n_len * ((model.loge - model_new.loge) + (model.loge2 - model_new.loge2))
+        log_accept_ratio = ((new_logL - logL) 
+                            + n_len * ((model.loge - model_new.loge) + (model.loge2 - model_new.loge2)) 
+                            + 2 * (model.loge_gv - model_new.loge_gv))
 
         if np.log(np.random.rand()) < log_accept_ratio:
             model = model_new
             logL = new_logL
-            logL_PP = new_logL_PP
-            logL_SS = new_logL_SS
+            if bookkeeping.mode == 3:
+                logL_PP = new_logL_PP
+                logL_SS = new_logL_SS
         
         logL_trace.append(logL)
-        logL_PP_trace.append(logL_PP)
-        logL_SS_trace.append(logL_SS)
+        if bookkeeping.mode == 3:
+            logL_PP_trace.append(logL_PP)
+            logL_SS_trace.append(logL_SS)
 
         # Save only selected models after burn-in
         if iStep >= burnInSteps and (iStep - burnInSteps) % save_interval == 0:

@@ -237,3 +237,239 @@ def plot_predicted_vs_input(ensemble, P, D_obs, prior, bookkeeping):
 
     else:
         raise ValueError(f"Unsupported mode={mode}. Expected 1, 2, or 3.")
+
+def plot_posterior_error_params(ensemble, bookkeeping, bins=40, figsize=(6, 8), density=True):
+    """
+    Plot posterior histograms of error hyperparameters:
+      - mode 1/2: loge
+      - mode 3:   loge (PP) and loge2 (SS)
+      - if bookkeeping.fitgv: also loge_gv
+
+    Parameters
+    ----------
+    ensemble : list[Model]
+        List of posterior samples (after burn-in).
+    bookkeeping : object
+        Has attributes:
+          - mode (1, 2, or 3)
+          - fitgv (bool)
+    bins : int
+        Number of histogram bins.
+    figsize : tuple
+        Figure size.
+    density : bool
+        If True, plot normalized histograms.
+    """
+
+    mode = bookkeeping.mode
+    fitgv = bookkeeping.fitgv
+
+    # Decide how many panels
+    n_panels = 0
+    plot_loge = False
+    plot_loge2 = False
+    plot_loge_gv = False
+
+    if mode in (1, 2):
+        plot_loge = True
+        n_panels += 1
+    elif mode == 3:
+        plot_loge = True
+        plot_loge2 = True
+        n_panels += 2
+
+    if fitgv:
+        plot_loge_gv = True
+        n_panels += 1
+
+    if n_panels == 0:
+        print("No error parameters requested for plotting.")
+        return
+
+    fig, axes = plt.subplots(n_panels, 1, figsize=figsize, squeeze=False)
+    axes = axes.ravel()
+
+    ipanel = 0
+
+    # --- loge ---
+    if plot_loge:
+        values = np.array([m.loge for m in ensemble])
+        ax = axes[ipanel]
+        ax.hist(values, bins=bins, density=density)
+        if mode in (1, 2):
+            ax.set_title(r"$\log e$ (waveform error)")
+            ax.set_xlabel(r"$\log e$")
+        else:
+            ax.set_title(r"$\log e_{\mathrm{PP}}$ (PP error)")
+            ax.set_xlabel(r"$\log e_{\mathrm{PP}}$")
+        ax.set_ylabel("Density" if density else "Count")
+        ipanel += 1
+
+    # --- loge2 (mode 3 only) ---
+    if plot_loge2:
+        values = np.array([m.loge2 for m in ensemble])
+        ax = axes[ipanel]
+        ax.hist(values, bins=bins, density=density)
+        ax.set_title(r"$\log e_{\mathrm{SS}}$ (SS error)")
+        ax.set_xlabel(r"$\log e_{\mathrm{SS}}$")
+        ax.set_ylabel("Density" if density else "Count")
+        ipanel += 1
+
+    # --- loge_gv (if fitgv) ---
+    if plot_loge_gv:
+        # Some early models may not have loge_gv; skip them safely
+        vals = []
+        for m in ensemble:
+            if hasattr(m, "loge_gv"):
+                vals.append(m.loge_gv)
+        if len(vals) > 0:
+            values = np.array(vals)
+            ax = axes[ipanel]
+            ax.hist(values, bins=bins, density=density)
+            ax.set_title(r"$\log e_{\mathrm{gv}}$ (group-velocity error)")
+            ax.set_xlabel(r"$\log e_{\mathrm{gv}}$")
+            ax.set_ylabel("Density" if density else "Count")
+        else:
+            ax = axes[ipanel]
+            ax.text(0.5, 0.5, "No loge_gv attribute in models", ha="center", va="center")
+            ax.set_axis_off()
+
+    plt.tight_layout()
+    plt.show()
+
+
+def compute_gv_for_model(model, bookkeeping, periods, vpvsr=1.8,
+                         wave="rayleigh", mode=1, flat_earth=True):
+    """
+    Compute group velocities for a single Model using pysurf96.
+
+    Parameters
+    ----------
+    model : Model
+    bookkeeping : object
+        Has attribute 'mode' (1, 2, or 3).
+    periods : array_like
+        Periods at which to compute group velocities.
+    vpvsr : float
+        Fixed Vp/Vs ratio for modes 1 and 2.
+    wave : str
+        surf96 wave type ("rayleigh" or "love").
+    mode : int
+        surf96 mode index (1 = fundamental).
+    flat_earth : bool
+        Passed to surf96.
+
+    Returns
+    -------
+    gv_model : np.ndarray
+        Group velocities for the given model at the specified periods.
+        Shape: (len(periods),)
+    """
+
+    from pysurf96 import surf96
+
+    periods = np.asarray(periods, dtype=float)
+
+    # Layer thicknesses: append 0 for half-space
+    H = np.append(model.H, 0.0)
+
+    if bookkeeping.mode == 1:
+        vp = np.asarray(model.v, dtype=float)
+        vs = vp / vpvsr
+    elif bookkeeping.mode == 2:
+        vs = np.asarray(model.v, dtype=float)
+        vp = vs * vpvsr
+    elif bookkeeping.mode == 3:
+        vs = np.asarray(model.v, dtype=float)
+        # rho in this mode holds VP/VS ratio
+        vp = vs * np.asarray(model.rho, dtype=float)
+    else:
+        raise ValueError(f"Unsupported bookkeeping.mode = {bookkeeping.mode}")
+
+    # Simple rho model
+    rho = vs * 0.8
+
+    gv_model = surf96(
+        H,
+        vp,
+        vs,
+        rho,
+        periods,
+        wave=wave,
+        mode=mode,
+        velocity="group",
+        flat_earth=flat_earth
+    )
+
+    return np.asarray(gv_model, dtype=float)
+
+def plot_posterior_group_velocities(ensemble, bookkeeping,
+                                    periods, gv_true,
+                                    vpvsr=1.8,
+                                    wave="rayleigh", mode_idx=1,
+                                    bins=30, density=True,
+                                    figsize=(6, 5)):
+    """
+    For each model in the ensemble, compute group velocities with surf96,
+    then plot posterior histograms at each period, with vertical lines for
+    the "true" values.
+
+    Parameters
+    ----------
+    ensemble : list[Model]
+        Posterior samples (after burn-in).
+    bookkeeping : object
+        Has attribute 'mode' (1, 2, or 3).
+    periods : array_like
+        Periods at which gv is measured. Shape (n_per,).
+    gv_true : array_like
+        True or observed group velocities at the same periods. Shape (n_per,).
+    vpvsr : float
+        Fixed Vp/Vs ratio for modes 1 and 2.
+    wave : str
+        Wave type for surf96 ("rayleigh" or "love").
+    mode_idx : int
+        Mode index for surf96 (1 = fundamental).
+    bins : int
+        Number of bins for each histogram.
+    density : bool
+        Whether to normalize histograms.
+    figsize : tuple
+        Base figure size; height will be scaled by number of periods.
+    """
+
+    periods = np.asarray(periods, dtype=float)
+    gv_true = np.asarray(gv_true, dtype=float)
+
+    if periods.shape != gv_true.shape:
+        raise ValueError("periods and gv_true must have the same shape.")
+
+    n_models = len(ensemble)
+    n_per = len(periods)
+
+    # Compute gv for every model
+    gv_all = np.empty((n_models, n_per), dtype=float)
+    for i, m in enumerate(ensemble):
+        gv_all[i, :] = compute_gv_for_model(
+            m, bookkeeping, periods,
+            vpvsr=vpvsr, wave=wave, mode=mode_idx
+        )
+
+    fig, axes = plt.subplots(n_per, 1,
+                             figsize=(figsize[0], figsize[1] * n_per),
+                             squeeze=False)
+    axes = axes.ravel()
+
+    for iper in range(n_per):
+        ax = axes[iper]
+        vals = gv_all[:, iper]
+
+        ax.hist(vals, bins=bins, density=density)
+        ax.axvline(gv_true[iper], linestyle="--")  # true value
+
+        ax.set_title(f"Group velocity at period = {periods[iper]:.2f} s")
+        ax.set_xlabel("Group velocity (km/s)")
+        ax.set_ylabel("Density" if density else "Count")
+
+    plt.tight_layout()
+    plt.show()

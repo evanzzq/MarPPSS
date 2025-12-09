@@ -7,6 +7,7 @@ class Bookkeeping:
     rayp:           np.ndarray # mode 1/2: [rayp]; mode 3: [rayp_PP, rayp_SS]
     fitRange:       np.ndarray = None # mode 1/2: [tmin, tmax]; mode 3: [tmin_PP, tmax_PP, tmin_SS, tmax_SS]
     fitLoge:        bool = True
+    fitgv:          bool = False
     totalSteps:     int = int(1e6)
     burnInSteps:    int = None
     nSaveModels:    int = 100
@@ -55,6 +56,7 @@ class Model:
     w2: np.ndarray # in mode 3 (joint), w is for PP and w2 is for SS
     loge: float # relative error for mode 1/2
     loge2: float # in mode 3 (joint), loge is for PP and loge2 is for SS
+    loge_gv: float # for group velocity measurements
     v: np.ndarray # len(v) = len(H) + 1
     rho: np.ndarray # len(rho) = len(v) = len(H) + 1
 
@@ -68,7 +70,8 @@ class Model:
             w2=np.ones(1),
             loge=0.,
             loge2=0.,
-            v=np.random.uniform(prior.vRange[0], prior.vRange[1], 2),
+            loge_gv=0.,
+            v = np.sort(np.random.uniform(prior.vRange[0], prior.vRange[1], 2)),
             rho=np.random.uniform(prior.rhoRange[0], prior.rhoRange[1], 2) # rho will be ignore in mode 1/2
         )
     

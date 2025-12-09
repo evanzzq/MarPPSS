@@ -92,7 +92,7 @@ def check_model(model, prior, rayp):
     if not np.all(np.diff(model.v) >= 0.0):
         return False
 
-    if len(rayp) == 1:
+    if isinstance(rayp, float):
         # mode 1/2
         tau = 2.0 * H * np.sqrt(1.0 / (v**2) - rayp**2)
     else:
@@ -182,6 +182,7 @@ def prepare_experiment(exp_vars):
         rayp=exp_vars["rayp"],
         fitRange=exp_vars["fitRange"],
         fitLoge=exp_vars["fitLoge"],
+        fitgv=exp_vars["fitgv"],
         totalSteps=exp_vars["totalSteps"],
         burnInSteps=exp_vars["burnInSteps"],
         nSaveModels=exp_vars["nSaveModels"],

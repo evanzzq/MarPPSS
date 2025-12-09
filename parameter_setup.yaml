@@ -17,8 +17,8 @@ common:
   # prior ranges
   HRange: [15.0, 30.0]
   wRange: [0.5, 1.5]
-  vRange: [1.8, 5.0]
-  logeRange: [0., 3.]
+  vRange: [4.0, 9.0]
+  logeRange: [0., 10.]
   rhoRange: [1.7, 2.0]
 
   # default CD and rel. error
@@ -35,7 +35,7 @@ common:
   burnInSteps: 800000
   nSaveModels: 200
   actionsPerStep: 1
-  num_chains: 8
+  num_chains: 32
 
   ###################
   # event specifics #
@@ -53,125 +53,147 @@ experiments:
   - evname: "S1000a" # name of event in raw data dir
     dtype: "VEL"
     src_sigma: 2.0
-    
-    mode: 3                      # 1=PP, 2=SS, 3=joint
-    maxN: 3
-    fitRange: [5, 30, 5, 50]
-    runname: "run1_8c_maxN3_joint"
-  
-  - evname: "S1000a_pzfiltered" # name of event in raw data dir
-    dtype: "VEL"
-    src_sigma: 2.0
-    
-    mode: 3                      # 1=PP, 2=SS, 3=joint
-    maxN: 3
-    fitRange: [5, 30, 5, 50]
-    runname: "run1_8c_maxN3_joint"
-  
-  - evname: "S1000a" # name of event in raw data dir
-    dtype: "VEL"
-    src_sigma: 3.0
+    rayp: 0.0983
 
-    PPfreq: [0.2, 0.6]
-    SSfreq: [0.2, 0.6]
-    
-    mode: 3                      # 1=PP, 2=SS, 3=joint
+    mode: 1                     # 1=PP, 2=SS, 3=joint
     maxN: 3
-    fitRange: [5, 30, 5, 50]
-    runname: "run1_8c_maxN3_joint"
-  
-  - evname: "S1000a_pzfiltered" # name of event in raw data dir
-    dtype: "VEL"
-    src_sigma: 3.0
-    
-    mode: 3                      # 1=PP, 2=SS, 3=joint
-    maxN: 3
-    fitRange: [5, 30, 5, 50]
-    runname: "run1_8c_maxN3_joint"
+    fitRange: [5, 30]
+    fitgv: true
+    runname: "run1_32c_maxN3_PP_gv"
 
-  - evname: "S1000a" # name of event in raw data dir
-    dtype: "VEL"
-    src_sigma: 4.0
+  # - evname: "S1000a_pzfiltered" # name of event in raw data dir
+  #   dtype: "VEL"
+  #   src_sigma: 2.0
+  #   rayp: 0.0983
 
-    PPfreq: [0.2, 0.6]
-    SSfreq: [0.2, 0.6]
-    
-    mode: 3                      # 1=PP, 2=SS, 3=joint
-    maxN: 3
-    fitRange: [5, 30, 5, 50]
-    runname: "run1_8c_maxN3_joint"
-  
-  - evname: "S1000a_pzfiltered" # name of event in raw data dir
-    dtype: "VEL"
-    src_sigma: 4.0
-    
-    mode: 3                      # 1=PP, 2=SS, 3=joint
-    maxN: 3
-    fitRange: [5, 30, 5, 50]
-    runname: "run1_8c_maxN3_joint"
+  #   mode: 1                     # 1=PP, 2=SS, 3=joint
+  #   maxN: 3
+  #   fitRange: [5, 30]
+  #   fitgv: true
+  #   runname: "run1_8c_maxN3_PP_gv"
 
-  - evname: "S1000a" # name of event in raw data dir
-    dtype: "VEL"
-    src_sigma: 2.0
+  # - evname: "S1000a" # name of event in raw data dir
+  #   dtype: "VEL"
+  #   src_sigma: 2.0
     
-    mode: 3                      # 1=PP, 2=SS, 3=joint
-    maxN: 3
-    fitRange: [5, 30, 5, 50]
-    useCD: true
-    runname: "run2_8c_maxN3_CD_joint"
+  #   mode: 3                      # 1=PP, 2=SS, 3=joint
+  #   maxN: 3
+  #   fitRange: [5, 30, 5, 50]
+  #   runname: "run1_8c_maxN3_joint"
   
-  - evname: "S1000a_pzfiltered" # name of event in raw data dir
-    dtype: "VEL"
-    src_sigma: 2.0
+  # - evname: "S1000a_pzfiltered" # name of event in raw data dir
+  #   dtype: "VEL"
+  #   src_sigma: 2.0
     
-    mode: 3                      # 1=PP, 2=SS, 3=joint
-    maxN: 3
-    fitRange: [5, 30, 5, 50]
-    useCD: true
-    runname: "run2_8c_maxN3_CD_joint"
+  #   mode: 3                      # 1=PP, 2=SS, 3=joint
+  #   maxN: 3
+  #   fitRange: [5, 30, 5, 50]
+  #   runname: "run1_8c_maxN3_joint"
   
-  - evname: "S1000a" # name of event in raw data dir
-    dtype: "VEL"
-    src_sigma: 3.0
+  # - evname: "S1000a" # name of event in raw data dir
+  #   dtype: "VEL"
+  #   src_sigma: 3.0
 
-    PPfreq: [0.2, 0.6]
-    SSfreq: [0.2, 0.6]
+  #   PPfreq: [0.2, 0.6]
+  #   SSfreq: [0.2, 0.6]
     
-    mode: 3                      # 1=PP, 2=SS, 3=joint
-    maxN: 3
-    fitRange: [5, 30, 5, 50]
-    useCD: true
-    runname: "run2_8c_maxN3_CD_joint"
+  #   mode: 3                      # 1=PP, 2=SS, 3=joint
+  #   maxN: 3
+  #   fitRange: [5, 30, 5, 50]
+  #   runname: "run1_8c_maxN3_joint"
   
-  - evname: "S1000a_pzfiltered" # name of event in raw data dir
-    dtype: "VEL"
-    src_sigma: 3.0
+  # - evname: "S1000a_pzfiltered" # name of event in raw data dir
+  #   dtype: "VEL"
+  #   src_sigma: 3.0
     
-    mode: 3                      # 1=PP, 2=SS, 3=joint
-    maxN: 3
-    fitRange: [5, 30, 5, 50]
-    useCD: true
-    runname: "run2_8c_maxN3_CD_joint"
+  #   mode: 3                      # 1=PP, 2=SS, 3=joint
+  #   maxN: 3
+  #   fitRange: [5, 30, 5, 50]
+  #   runname: "run1_8c_maxN3_joint"
 
-  - evname: "S1000a" # name of event in raw data dir
-    dtype: "VEL"
-    src_sigma: 4.0
+  # - evname: "S1000a" # name of event in raw data dir
+  #   dtype: "VEL"
+  #   src_sigma: 4.0
 
-    PPfreq: [0.2, 0.6]
-    SSfreq: [0.2, 0.6]
+  #   PPfreq: [0.2, 0.6]
+  #   SSfreq: [0.2, 0.6]
     
-    mode: 3                      # 1=PP, 2=SS, 3=joint
-    maxN: 3
-    fitRange: [5, 30, 5, 50]
-    useCD: true
-    runname: "run2_8c_maxN3_CD_joint"
+  #   mode: 3                      # 1=PP, 2=SS, 3=joint
+  #   maxN: 3
+  #   fitRange: [5, 30, 5, 50]
+  #   runname: "run1_8c_maxN3_joint"
   
-  - evname: "S1000a_pzfiltered" # name of event in raw data dir
-    dtype: "VEL"
-    src_sigma: 4.0
+  # - evname: "S1000a_pzfiltered" # name of event in raw data dir
+  #   dtype: "VEL"
+  #   src_sigma: 4.0
     
-    mode: 3                      # 1=PP, 2=SS, 3=joint
-    maxN: 3
-    fitRange: [5, 30, 5, 50]
-    useCD: true
-    runname: "run2_8c_maxN3_CD_joint"
+  #   mode: 3                      # 1=PP, 2=SS, 3=joint
+  #   maxN: 3
+  #   fitRange: [5, 30, 5, 50]
+  #   runname: "run1_8c_maxN3_joint"
+
+  # - evname: "S1000a" # name of event in raw data dir
+  #   dtype: "VEL"
+  #   src_sigma: 2.0
+    
+  #   mode: 3                      # 1=PP, 2=SS, 3=joint
+  #   maxN: 3
+  #   fitRange: [5, 30, 5, 50]
+  #   useCD: true
+  #   runname: "run2_8c_maxN3_CD_joint"
+  
+  # - evname: "S1000a_pzfiltered" # name of event in raw data dir
+  #   dtype: "VEL"
+  #   src_sigma: 2.0
+    
+  #   mode: 3                      # 1=PP, 2=SS, 3=joint
+  #   maxN: 3
+  #   fitRange: [5, 30, 5, 50]
+  #   useCD: true
+  #   runname: "run2_8c_maxN3_CD_joint"
+  
+  # - evname: "S1000a" # name of event in raw data dir
+  #   dtype: "VEL"
+  #   src_sigma: 3.0
+
+  #   PPfreq: [0.2, 0.6]
+  #   SSfreq: [0.2, 0.6]
+    
+  #   mode: 3                      # 1=PP, 2=SS, 3=joint
+  #   maxN: 3
+  #   fitRange: [5, 30, 5, 50]
+  #   useCD: true
+  #   runname: "run2_8c_maxN3_CD_joint"
+  
+  # - evname: "S1000a_pzfiltered" # name of event in raw data dir
+  #   dtype: "VEL"
+  #   src_sigma: 3.0
+    
+  #   mode: 3                      # 1=PP, 2=SS, 3=joint
+  #   maxN: 3
+  #   fitRange: [5, 30, 5, 50]
+  #   useCD: true
+  #   runname: "run2_8c_maxN3_CD_joint"
+
+  # - evname: "S1000a" # name of event in raw data dir
+  #   dtype: "VEL"
+  #   src_sigma: 4.0
+
+  #   PPfreq: [0.2, 0.6]
+  #   SSfreq: [0.2, 0.6]
+    
+  #   mode: 3                      # 1=PP, 2=SS, 3=joint
+  #   maxN: 3
+  #   fitRange: [5, 30, 5, 50]
+  #   useCD: true
+  #   runname: "run2_8c_maxN3_CD_joint"
+  
+  # - evname: "S1000a_pzfiltered" # name of event in raw data dir
+  #   dtype: "VEL"
+  #   src_sigma: 4.0
+    
+  #   mode: 3                      # 1=PP, 2=SS, 3=joint
+  #   maxN: 3
+  #   fitRange: [5, 30, 5, 50]
+  #   useCD: true
+  #   runname: "run2_8c_maxN3_CD_joint"
