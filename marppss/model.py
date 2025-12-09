@@ -8,6 +8,7 @@ class Bookkeeping:
     fitRange:       np.ndarray = None # mode 1/2: [tmin, tmax]; mode 3: [tmin_PP, tmax_PP, tmin_SS, tmax_SS]
     fitLoge:        bool = True
     fitgv:          bool = False
+    fitrho:         bool = False # only refers to fitgv scenario
     totalSteps:     int = int(1e6)
     burnInSteps:    int = None
     nSaveModels:    int = 100

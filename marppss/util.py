@@ -183,6 +183,7 @@ def prepare_experiment(exp_vars):
         fitRange=exp_vars["fitRange"],
         fitLoge=exp_vars["fitLoge"],
         fitgv=exp_vars["fitgv"],
+        fitrho=exp_vars["fitrho"],
         totalSteps=exp_vars["totalSteps"],
         burnInSteps=exp_vars["burnInSteps"],
         nSaveModels=exp_vars["nSaveModels"],
