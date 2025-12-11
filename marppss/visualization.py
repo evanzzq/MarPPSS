@@ -70,7 +70,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 def plot_velocity_ensemble(models,
-                           mode,
+                           bookkeeping,
                            HRange,
                            alpha=0.1,
                            linewidth=1.0):
@@ -103,11 +103,14 @@ def plot_velocity_ensemble(models,
     linewidth : float
         Line width for individual profiles.
     """
+    mode = bookkeeping.mode
+    fitgv = bookkeeping.fitgv
+    fitrho = bookkeeping.fitrho
     H_min, H_max = HRange
 
     fig, ax = plt.subplots(figsize=(5, 7))
 
-    if mode in (1, 2):
+    if mode in (1, 2) and not fitgv:
         # Single-velocity ensemble
         for m in models:
             vx, z = _model_to_step_profile(m.H, m.v, HRange)
@@ -117,15 +120,15 @@ def plot_velocity_ensemble(models,
         legend_handles = [Line2D([0], [0], color="C0", lw=linewidth, label="v")]
         ax.legend(handles=legend_handles, loc="lower right")
 
-    elif mode == 3:
+    elif mode == 3 or (fitgv and fitrho):
         # Vs and Vp ensemble (mode 3: v = Vs, rho = Vp/Vs)
         first_vs = True
         first_vp = True
 
         for m in models:
-            vs = np.asarray(m.v, dtype=float)
+            vp = np.asarray(m.v, dtype=float)
             ratio = np.asarray(m.rho, dtype=float)   # here rho = Vp/Vs
-            vp = vs * ratio
+            vs = vp / ratio
 
             # Vs profile
             vx_vs, z_vs = _model_to_step_profile(m.H, vs, HRange)
@@ -172,153 +175,139 @@ try:
 except ImportError:
     _HAVE_SCIPY = False
 
-
-def build_velocity_heatmap_from_step(models,
-                                     HRange,
-                                     nbins_z=200,
-                                     nbins_v=80,
-                                     row_normalized=True):
+def _eval_profile_on_depths(H, v, depth_grid):
     """
-    Build a 2D histogram (depth × velocity) directly from the step
-    profiles produced by _model_to_step_profile.
+    Given layer discontinuities H (Nlayer,) and layer velocities v (Nlayer+1,),
+    return velocity on a regular depth_grid (nz,).
+    """
+    H = np.asarray(H, dtype=float)
+    v = np.asarray(v, dtype=float)
+    depth_grid = np.asarray(depth_grid, dtype=float)
+
+    # Layer tops: [0, H[0], H[1], ..., H[N-1]]
+    layer_tops = np.concatenate(([0.0], H))
+    Nlayer = H.size
+
+    # For each depth, find which layer it belongs to
+    # idx in [0..Nlayer], so v[idx] is correct layer velocity
+    idx = np.searchsorted(layer_tops[1:], depth_grid, side="right")
+    # idx = 0: above first discontinuity -> v[0]
+    # idx = Nlayer: below last discontinuity -> v[-1]
+    return v[idx]
+
+
+def sample_models_to_depth_grid(models, bookkeeping, HRange, nz=200):
+    """
+    Sample all models in the ensemble on a common depth grid.
 
     Returns
     -------
-    z_centers : (nbins_z,) depth bin centers
-    v_centers : (nbins_v,) velocity bin centers
-    H2        : (nbins_z, nbins_v) histogram (row-normalized if requested)
+    depth_grid : (nz,)
+    vel_profiles : (n_models, nz)  # for one velocity field (v or Vs or Vp)
     """
     H_min, H_max = HRange
+    depth_grid = np.linspace(H_min, H_max, nz)
+    mode = bookkeeping.mode
+    fitgv = bookkeeping.fitgv
+    fitrho = bookkeeping.fitrho
 
-    # --- 1. Collect all (v, z) points from step profiles ---
-    all_v = []
-    all_z = []
+    vel_profiles = []
 
     for m in models:
-        vx, z = _model_to_step_profile(m.H, m.v, HRange)
-        mask = (z >= H_min) & (z <= H_max)
-        all_v.append(vx[mask])
-        all_z.append(z[mask])
+        if mode in (1, 2) and not fitgv:
+            # Single velocity in m.v
+            v_layer = np.asarray(m.v, dtype=float)
+        elif mode == 3 or (fitgv and fitrho):
+            # Example: use Vs (you can swap to Vp if you want)
+            vp = np.asarray(m.v, dtype=float)
+            ratio = np.asarray(m.rho, dtype=float)  # rho = Vp/Vs
+            vs = vp / ratio
+            v_layer = vp
+        else:
+            raise ValueError(f"Unsupported mode={mode} for sampling.")
 
-    all_v = np.concatenate(all_v)
-    all_z = np.concatenate(all_z)
+        vel_profiles.append(_eval_profile_on_depths(m.H, v_layer, depth_grid))
 
-    # --- 2. Define bin edges ---
-    vmin = float(all_v.min())
-    vmax = float(all_v.max())
-    if vmin == vmax:
-        delta = 0.05 * (abs(vmin) if vmin != 0 else 1.0)
-        vmin -= delta
-        vmax += delta
+    vel_profiles = np.vstack(vel_profiles)  # (n_models, nz)
+    return depth_grid, vel_profiles
 
-    z_edges = np.linspace(H_min, H_max, nbins_z + 1)
-    v_edges = np.linspace(vmin, vmax, nbins_v + 1)
-
-    # --- 3. 2D histogram: x = v, y = z ---
-    H2, v_edges_out, z_edges_out = np.histogram2d(
-        all_v, all_z, bins=[v_edges, z_edges]
-    )
-
-    # shape → (nz, nv): rows = depth, cols = velocity
-    H2 = H2.T
-
-    # --- 4. Row normalization (posterior PDF at each depth) ---
-    if row_normalized:
-        row_sums = H2.sum(axis=1, keepdims=True)
-        row_sums[row_sums == 0] = 1.0
-        H2 = H2 / row_sums
-    else:
-        if H2.max() > 0:
-            H2 = H2 / H2.max()
-
-    # Bin centers
-    z_centers = 0.5 * (z_edges_out[:-1] + z_edges_out[1:])
-    v_centers = 0.5 * (v_edges_out[:-1] + v_edges_out[1:])
-
-    return z_centers, v_centers, H2
-
-def plot_velocity_heatmap_from_step(models,
-                                    HRange,
-                                    nbins_z=200,
-                                    nbins_v=80,
-                                    cmap="magma",
-                                    row_normalized=True,
-                                    overlay_median=True,
-                                    smooth_sigma_depth=1.0,
-                                    smooth_sigma_vel=1.0):
+def plot_velocity_density_image(models,
+                                bookkeeping,
+                                HRange,
+                                nz=200,
+                                nv=200,
+                                vmin=None,
+                                vmax=None,
+                                cmap="viridis",
+                                smooth_sigma=None):
     """
-    Nicer-looking posterior v(z) heatmap based on step profiles.
+    Make a 2D density map of velocity vs depth from an ensemble of models.
 
-    - Uses your _model_to_step_profile (same as spaghetti)
-    - Row-normalized so each depth row is a PDF
-    - Optional Gaussian smoothing in (depth, velocity) directions
-    - Overlays median v(z) curve
+    - y-axis: depth
+    - x-axis: velocity
+    - color: density of samples (probability-like)
+
+    This is your "image-style" view instead of spaghetti.
     """
-    H_min, H_max = HRange
+    from math import isfinite
 
-    z, v_centers, H2 = build_velocity_heatmap_from_step(
-        models,
-        HRange,
-        nbins_z=nbins_z,
-        nbins_v=nbins_v,
-        row_normalized=row_normalized,
-    )
+    depth_grid, vel_profiles = sample_models_to_depth_grid(models, bookkeeping, HRange, nz=nz)
 
-    # --- Optional smoothing ---
-    if _HAVE_SCIPY and (smooth_sigma_depth > 0 or smooth_sigma_vel > 0):
-        sigma = (smooth_sigma_depth, smooth_sigma_vel)
-        H2_smooth = gaussian_filter(H2, sigma=sigma)
-    else:
-        H2_smooth = H2
+    if vmin is None:
+        vmin = np.nanmin(vel_profiles)
+    if vmax is None:
+        vmax = np.nanmax(vel_profiles)
 
-    # Optionally go to log space to enhance low values
-    eps = 1e-6
-    H2_plot = np.log10(H2_smooth + eps)
-    vmin = H2_plot.max() - 2.0  # show ~2 orders of magnitude
-    vmax = H2_plot.max()
+    # 2D histogram: we treat all (depth, velocity) samples together
+    z_samples = np.tile(depth_grid, vel_profiles.shape[0])      # (n_models * nz,)
+    v_samples = vel_profiles.ravel()
 
-    fig, ax = plt.subplots(figsize=(6, 7))
+    # Remove NaNs/inf if any
+    mask = np.isfinite(z_samples) & np.isfinite(v_samples)
+    z_samples = z_samples[mask]
+    v_samples = v_samples[mask]
 
-    im = ax.imshow(
-        H2_plot,
-        origin="upper",
-        aspect="auto",
-        extent=[v_centers[0], v_centers[-1], z[-1], z[0]],
-        cmap=cmap,
-        vmin=vmin,
-        vmax=vmax,
-        interpolation="bilinear",   # smoother appearance
-    )
+    # Bin edges
+    z_edges = np.linspace(HRange[0], HRange[1], nz + 1)
+    v_edges = np.linspace(vmin, vmax, nv + 1)
 
-    cbar_label = "log10 Posterior PDF at each depth" if row_normalized else "log10 Counts"
-    cbar = plt.colorbar(im, ax=ax, label=cbar_label)
+    # Histogram in (depth, velocity)
+    density, z_edges, v_edges = np.histogram2d(
+        z_samples, v_samples,
+        bins=[z_edges, v_edges],
+        density=True,
+    )   # density.shape = (nz, nv)
 
-    # --- Overlay median profile (sampled smoothly in depth) ---
-    if overlay_median:
-        nz_med = 400
-        z_grid = np.linspace(H_min, H_max, nz_med)
-        v_profiles = []
+    # Optional smoothing (if you have SciPy)
+    try:
+        if smooth_sigma is not None:
+            from scipy.ndimage import gaussian_filter
+            density = gaussian_filter(density, sigma=smooth_sigma)
+    except ImportError:
+        pass  # silently ignore if SciPy not installed
 
-        for m in models:
-            vx, z_step = _model_to_step_profile(m.H, m.v, HRange)
-            v_on_grid = np.interp(z_grid, z_step, vx)
-            v_profiles.append(v_on_grid)
+    # Bin centers for plotting
+    z_centers = 0.5 * (z_edges[:-1] + z_edges[1:])
+    v_centers = 0.5 * (v_edges[:-1] + v_edges[1:])
 
-        v_profiles = np.vstack(v_profiles)
-        median_v = np.median(v_profiles, axis=0)
-        ax.plot(median_v, z_grid, color="cyan", lw=2, label="Median v(z)")
-        ax.legend(loc="lower right")
+    # Plot
+    plt.figure(figsize=(5, 7))
+    # Percentile-based dynamic color limits
+    lo = np.percentile(density, 2)    # 5th percentile
+    hi = np.percentile(density, 98)   # 95th percentile
+    plt.pcolormesh(v_centers, z_centers, density, shading="auto", cmap=cmap, vmin=lo, vmax=hi)
+    cbar = plt.colorbar(label="Density")
 
-    ax.set_xlabel("Velocity (km/s)")
-    ax.set_ylabel("Depth (km)")
-    ax.set_ylim(H_max, H_min)  # depth increasing downward
-    ax.set_title("Posterior Velocity Structure (smoothed density)")
-    ax.grid(alpha=0.15, linestyle=":")
-
+    plt.xlabel("Velocity (km/s)")
+    plt.ylabel("Depth (km)")
+    plt.xlim(1.5, 8)
+    plt.gca().invert_yaxis()  # depth increasing downward
+    plt.title("Velocity ensemble density (v vs depth)")
+    plt.grid(alpha=0.2)
     plt.tight_layout()
     plt.show()
 
-    return fig, ax
+    return v_centers, z_centers, density
 
 def plot_predicted_vs_input(ensemble, P, D_obs, prior, bookkeeping):
     """
@@ -509,6 +498,46 @@ def plot_posterior_error_params(ensemble, bookkeeping, bins=40, figsize=(6, 8), 
     plt.tight_layout()
     plt.show()
 
+def plot_posterior_num_phases(ensemble, bins=None, figsize=(6, 4), density=False):
+    """
+    Plot a posterior histogram of the number of phases (model.Nlayer) 
+    in the ensemble (after burn-in).
+
+    Parameters
+    ----------
+    ensemble : list[Model]
+        List of posterior samples (after burn-in).
+    bins : int or None
+        Number of histogram bins. If None, automatically computed 
+        from the discrete range of Nlayer values.
+    figsize : tuple
+        Figure size.
+    density : bool
+        If True, plot normalized histogram.
+    """
+
+    # Extract integer values
+    nlayer_vals = np.array([m.Nlayer for m in ensemble])
+
+    # Choose bins: if user did not specify, use one bin per integer value
+    if bins is None:
+        unique_vals = np.unique(nlayer_vals)
+        # bins placed between integer phase counts
+        bins = np.arange(unique_vals.min() - 0.5, unique_vals.max() + 1.5)
+
+    fig, ax = plt.subplots(figsize=figsize)
+
+    ax.hist(nlayer_vals, bins=bins, density=density, rwidth=0.9, align="mid")
+
+    ax.set_title("Posterior Distribution of Number of Phases")
+    ax.set_xlabel("Nlayer (Number of phases)")
+    ax.set_ylabel("Density" if density else "Count")
+
+    # Ensure ticks land on integer values
+    ax.set_xticks(np.unique(nlayer_vals))
+
+    plt.tight_layout()
+    plt.show()
 
 def compute_gv_for_model(model, bookkeeping, periods, vpvsr=1.8,
                          wave="rayleigh", mode=1, flat_earth=True):

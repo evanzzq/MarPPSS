@@ -2,7 +2,7 @@ import os
 import pickle
 import numpy as np
 import matplotlib.pyplot as plt
-from marppss.visualization import plot_velocity_ensemble, plot_velocity_heatmap_from_step, plot_predicted_vs_input, plot_posterior_error_params, plot_posterior_group_velocities
+from marppss.visualization import plot_velocity_ensemble, plot_posterior_num_phases, plot_predicted_vs_input, plot_posterior_error_params, plot_posterior_group_velocities, plot_velocity_density_image
 
 # ==== Config ====
 # filedir = "H:/My Drive/Research/MarPPSS"
@@ -10,7 +10,7 @@ filedir = "/Users/evanzhang/zzq@umd.edu - Google Drive/My Drive/Research/MarPPSS
 
 # ---- User-defined experiment/run ----
 expname = "S1000a_src_2.0_s_PP"   # folder under run/
-runname = "run1_32c_maxN3_PP_gv"                     # subfolder under that
+runname = "fake_run_2"                     # subfolder under that
 
 # ---- Explicit data dirs (user-specified) ----
 PPdir = "S1000a_src_2.0_s_PP"        # folder under data/
@@ -164,12 +164,13 @@ else:
 #                       PLOT RESULTS
 # -----------------------------------------------------------
 
-plot_velocity_ensemble(ensemble_all, mode, prior.HRange)
-plot_velocity_heatmap_from_step(ensemble_all, prior.HRange)
-
+plot_velocity_ensemble(ensemble_all, bookkeeping, prior.HRange)
+v_centers, z_centers, density = plot_velocity_density_image(
+    ensemble_all, bookkeeping, prior.HRange, nz=200, nv=200, smooth_sigma=2.0)
 
 plot_predicted_vs_input(ensemble_all, P, D, prior, bookkeeping)
-plot_posterior_error_params(ensemble, bookkeeping)
+plot_posterior_error_params(ensemble_all, bookkeeping)
+plot_posterior_num_phases(ensemble_all)
 
 # Group-velocity posteriors (using your S1000a values)
 periods = np.array([18.9, 28.86])
@@ -177,7 +178,7 @@ gv_obs  = np.array([2.726, 2.829])
 
 if bookkeeping.fitgv:
     plot_posterior_group_velocities(
-        ensemble,
+        ensemble_all,
         bookkeeping,
         periods=periods,
         gv_true=gv_obs,

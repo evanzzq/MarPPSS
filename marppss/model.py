@@ -26,7 +26,7 @@ class Prior:
     tlen: float = None # half length in seconds
     HRange: tuple = (1, 60)
     wRange: tuple = (0.5, 1.5)
-    logeRange: tuple = (0., 2.)
+    logeRange: tuple = (0., 20.)
     vRange: tuple = (1.0, 5.0) # for mode 1/2 v is vp or vs respectively; for mode 3 v is vs, and vp = v * rho
     rhoRange: tuple = (1.6, 2.0)
 
@@ -42,7 +42,7 @@ class Prior:
         if self.wStd is None:
             self.wStd = 0.1 * (self.wRange[1] - self.wRange[0])
         if self.logeStd is None:
-            self.logeStd = 0.1 * (self.logeRange[1] - self.logeRange[0])
+            self.logeStd = 0.01 * (self.logeRange[1] - self.logeRange[0])
         if self.vStd is None:
             self.vStd = 0.2 * (self.vRange[1] - self.vRange[0])
         if self.rhoStd is None:
@@ -69,8 +69,8 @@ class Model:
             H=np.random.uniform(prior.HRange[0], prior.HRange[1], 1),
             w=np.ones(1),
             w2=np.ones(1),
-            loge=0.,
-            loge2=0.,
+            loge=10.,
+            loge2=10.,
             loge_gv=0.,
             v = np.sort(np.random.uniform(prior.vRange[0], prior.vRange[1], 2)),
             rho=np.random.uniform(prior.rhoRange[0], prior.rhoRange[1], 2) # rho will be ignore in mode 1/2

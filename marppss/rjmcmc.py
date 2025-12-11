@@ -39,8 +39,10 @@ def calc_like_prob(P, D, model, prior, bookkeeping, CDinv=None):
         logL = -0.5 * np.sum((Diff / sigma) ** 2)
     else:
         CDinv = np.asarray(CDinv)
+        if bookkeeping.fitRange is not None: 
+            CDinv = CDinv[left:right, left:right]
         CDinv *= np.exp(-model.loge)
-        logL = -0.5 * np.trace(Diff.T @ CDinv @ Diff) # not fixed for selected range case
+        logL = -0.5 * Diff @ CDinv @ Diff
 
     return logL
 
@@ -125,6 +127,7 @@ def calc_like_prob_gv(model, bookkeeping):
     # edit these based on data
     periods = np.array([18.9, 28.86]) 
     gv_obs = np.array([2.726, 2.829]) # S1000a group velocities
+    gv_unc = np.array([0.006146, 0.01261]) * 1 # S1000a gv uncertainties
     sigma_gv = 0.01
 
     if bookkeeping.fitrho or bookkeeping.mode == 3:
@@ -158,8 +161,8 @@ def calc_like_prob_gv(model, bookkeeping):
         flat_earth=True)
     
     diff_gv = (gv_model - gv_obs)
-    sigma_gv *= np.exp(0.5 * model.loge_gv)
-    logL_gv = -0.5 * np.sum((diff_gv / sigma_gv) ** 2)
+    gv_unc *= np.exp(0.5 * model.loge_gv)
+    logL_gv = -0.5 * np.sum((diff_gv / gv_unc) ** 2)
     
     return logL_gv
 
@@ -445,14 +448,24 @@ def rjmcmc_run(P, D, prior, bookkeeping, saveDir, CDinv=None):
     logL_trace = []
     if bookkeeping.mode in (1, 2):
         logL = calc_like_prob(P, D, model, prior, bookkeeping, CDinv=CDinv)
-        if bookkeeping.fitgv: logL += calc_like_prob_gv(model, bookkeeping)
+        if bookkeeping.fitgv: 
+            logL_gv_trace = []
+            logL_wf_trace = []
+            logL_wf_trace.append(logL)
+            logL_gv = calc_like_prob_gv(model, bookkeeping)
+            logL_gv_trace.append(logL_gv)
+            logL += logL_gv
         logL_trace.append(logL)
     elif bookkeeping.mode == 3:
         logL_PP_trace, logL_SS_trace = [], []
         logL, logL_PP, logL_SS = calc_like_prob_joint(
             P_PP, P_SS, D_PP, D_SS, 
             model, prior, bookkeeping, CDinv_PP=CDinv_PP, CDinv_SS=CDinv_SS)
-        if bookkeeping.fitgv: logL += calc_like_prob_gv(model, bookkeeping)
+        if bookkeeping.fitgv: 
+            logL_gv_trace = []
+            logL_gv = calc_like_prob_gv(model, bookkeeping)
+            logL_gv_trace.append(logL_gv)
+            logL += logL_gv
         logL_trace.append(logL)
         logL_PP_trace.append(logL_PP)
         logL_SS_trace.append(logL_SS)
@@ -470,7 +483,7 @@ def rjmcmc_run(P, D, prior, bookkeeping, saveDir, CDinv=None):
     if bookkeeping.fitLoge:
         if bookkeeping.mode in [1, 2]: actionPool = np.append(actionPool, [5]) # loge
         if bookkeeping.mode == 3: actionPool = np.append(actionPool, [5,6]) # loge and loge2
-    if bookkeeping.fitgv: actionPool = np.append(actionPool, [7]) # loge_gv
+    # if bookkeeping.fitgv: actionPool = np.append(actionPool, [7]) # loge_gv # commented out so loge_gv === 0
 
     for iStep in range(totalSteps):
 
@@ -506,7 +519,9 @@ def rjmcmc_run(P, D, prior, bookkeeping, saveDir, CDinv=None):
             new_logL, new_logL_PP, new_logL_SS = calc_like_prob_joint(
                 P_PP, P_SS, D_PP, D_SS, 
                 model_new, prior, bookkeeping, CDinv_PP=CDinv_PP, CDinv_SS=CDinv_SS)      
-        if bookkeeping.fitgv: new_logL += calc_like_prob_gv(model_new, bookkeeping)
+        if bookkeeping.fitgv: 
+            new_logL_gv = calc_like_prob_gv(model_new, bookkeeping)
+            new_logL += new_logL_gv
 
         # Acceptance probability
         log_accept_ratio = ((new_logL - logL) 
@@ -519,11 +534,16 @@ def rjmcmc_run(P, D, prior, bookkeeping, saveDir, CDinv=None):
             if bookkeeping.mode == 3:
                 logL_PP = new_logL_PP
                 logL_SS = new_logL_SS
+            if bookkeeping.fitgv:
+                logL_gv = new_logL_gv
         
         logL_trace.append(logL)
         if bookkeeping.mode == 3:
             logL_PP_trace.append(logL_PP)
             logL_SS_trace.append(logL_SS)
+        if bookkeeping.fitgv:
+            logL_gv_trace.append(logL_gv)
+            logL_wf_trace.append(logL - logL_gv)
 
         # Save only selected models after burn-in
         if iStep >= burnInSteps and (iStep - burnInSteps) % save_interval == 0:
@@ -534,20 +554,38 @@ def rjmcmc_run(P, D, prior, bookkeeping, saveDir, CDinv=None):
             # Save (overwrite) log-likelihood plot
             fig, ax = plt.subplots()
             ax.plot(logL_trace, 'k-')
+            ax.set_xscale('log')
             ax.set_xlabel("Step")
             ax.set_ylabel("log Likelihood")
             fig.tight_layout()
             fig.savefig(os.path.join(saveDir, "logL.png"))  # overwrites each time
             plt.close(fig)
 
+            # Also save waveform vs. group velocity misfit
+            if bookkeeping.mode in (1,2) and bookkeeping.fitgv:
+                fig, ax = plt.subplots()
+                ax.plot(logL_wf_trace, 'k-', label="waveform")
+                ax.plot(logL_gv_trace, 'r-', label="group vel.")
+                ymin = min(logL_wf_trace[-1], logL_gv_trace[-1]) - 0.1 * abs(logL_wf_trace[-1] - logL_gv_trace[-1])
+                ymax = max(logL_wf_trace[-1], logL_gv_trace[-1]) + 0.1 * abs(logL_wf_trace[-1] - logL_gv_trace[-1])
+                ax.set_ylim(ymin, ymax)
+                ax.set_xscale('log')
+                ax.set_xlabel("Step")
+                ax.set_ylabel("log Likelihood")
+                fig.tight_layout()
+                fig.savefig(os.path.join(saveDir, "logL_wf_gv.png"))  # overwrites each time
+                plt.close(fig)
+
             # Save PP/SS plots for mode 3
             if bookkeeping.mode == 3:
                 fig, ax = plt.subplots()
                 ax.plot(logL_PP_trace, 'b-', label="PP")
                 ax.plot(logL_SS_trace, 'r-', label="SS")
+                if bookkeeping.fitgv: ax.plot(logL_gv_trace, 'k-', label="group vel.")
                 ymin = min(logL_SS_trace[-1], logL_PP_trace[-1]) - 0.1 * abs(logL_SS_trace[-1] - logL_PP_trace[-1])
                 ymax = max(logL_SS_trace[-1], logL_PP_trace[-1]) + 0.1 * abs(logL_SS_trace[-1] - logL_PP_trace[-1])
                 ax.set_ylim(ymin, ymax)
+                ax.set_xscale('log')
                 ax.set_xlabel("Step")
                 ax.set_ylabel("log Likelihood")
                 ax.legend(loc="upper right")

@@ -89,7 +89,7 @@ def check_model(model, prior, rayp):
     v = np.asarray(model.v[:-1], dtype=float)
 
     # Strictly increasing velocity
-    if not np.all(np.diff(model.v) >= 0.0):
+    if not np.all(np.diff(model.v) > 0.0):
         return False
 
     if isinstance(rayp, float):
@@ -381,11 +381,15 @@ def prep_data(
     # -------------------------
     # 4. Noise window (pre-arrival)
     # -------------------------
-    noise_end = z_center + t0  # end = arrival + t0 (~ arrival - 40s)
+    noise_start_z = z_center + t0 - 100 # starts 100 s before ends
+    noise_end_z   = z_center + t0  # end = arrival + t0 (~ arrival - 40s)
+    noise_start_t = t_center + t0 - 100 # starts 100 s before ends
+    noise_end_t   = t_center + t0  # end = arrival + t0 (~ arrival - 40s)
 
-    idx_noise = (t_z >= 0.0) & (t_z < noise_end)
-    noise_z_full = st_z_filt.data[idx_noise]
-    noise_t_full = st_t_filt.data[idx_noise]
+    idx_noise_z = (t_z >= noise_start_z) & (t_z < noise_end_z)
+    idx_noise_t = (t_t >= noise_start_t) & (t_t < noise_end_t)
+    noise_z_full = st_z_filt.data[idx_noise_z]
+    noise_t_full = st_t_filt.data[idx_noise_t]
 
     # -------------------------
     # 5. Normalize P, D, noise
