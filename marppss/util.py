@@ -446,61 +446,66 @@ def prep_data(
     # 8. Quick QC plots
     # -------------------------
 
-    # # --- random noise segments for the time window ---
-    # def random_noise_segment(noise_full, segment_len):
-    #     n_total = len(noise_full)
-    #     if segment_len > n_total:
-    #         raise ValueError("Segment length is longer than noise trace")
-    #     start_idx = np.random.randint(0, n_total - segment_len + 1)
-    #     return noise_full[start_idx:start_idx + segment_len]
+    # --- random noise segments for the time window ---
+    def random_noise_segment(noise_full, segment_len):
+        n_total = len(noise_full)
+        if segment_len > n_total:
+            print(
+                f"[random_noise_segment] Warning: segment_len ({segment_len}) "
+                f"> noise length ({n_total}). Returning zeros."
+            )
+            return np.zeros(segment_len)
 
-    # noise_z_segment = random_noise_segment(noise_z_full, len(time))
-    # noise_t_segment = random_noise_segment(noise_t_full, len(time))
+        start_idx = np.random.randint(0, n_total - segment_len + 1)
+        return noise_full[start_idx:start_idx + segment_len]
 
-    # # (a) Data / reference / noise
-    # plt.figure(figsize=(12, 8))
+    noise_z_segment = random_noise_segment(noise_z_full, len(time))
+    noise_t_segment = random_noise_segment(noise_t_full, len(time))
 
-    # plt.subplot(2, 1, 1)
-    # plt.plot(time, D_z, label="D (filtered data)", color="gray")
-    # plt.plot(time, P_z, label="P (Gaussian reference)", color="black", linestyle="--")
-    # plt.plot(time, noise_z_segment, label="Noise (random segment)", color="red", alpha=0.7)
-    # plt.title("Z Component: Filtered Data, Reference, and Noise")
-    # plt.ylabel("Amplitude")
-    # plt.legend()
-    # plt.grid()
+    # (a) Data / reference / noise
+    plt.figure(figsize=(12, 8))
 
-    # plt.subplot(2, 1, 2)
-    # plt.plot(time, D_t, label="D (filtered data)", color="gray")
-    # plt.plot(time, P_t, label="P (Gaussian reference)", color="black", linestyle="--")
-    # plt.plot(time, noise_t_segment, label="Noise (random segment)", color="red", alpha=0.7)
-    # plt.title("T Component: Filtered Data, Reference, and Noise")
-    # plt.xlabel("Time (s)")
-    # plt.ylabel("Amplitude")
-    # plt.legend()
-    # plt.grid()
+    plt.subplot(2, 1, 1)
+    plt.plot(time, D_z, label="D (filtered data)", color="gray")
+    plt.plot(time, P_z, label="P (Gaussian reference)", color="black", linestyle="--")
+    plt.plot(time, noise_z_segment, label="Noise (random segment)", color="red", alpha=0.7)
+    plt.title("Z Component: Filtered Data, Reference, and Noise")
+    plt.ylabel("Amplitude")
+    plt.legend()
+    plt.grid()
 
-    # plt.tight_layout()
-    # plt.show(block=False)
-    # plt.pause(0.1)
+    plt.subplot(2, 1, 2)
+    plt.plot(time, D_t, label="D (filtered data)", color="gray")
+    plt.plot(time, P_t, label="P (Gaussian reference)", color="black", linestyle="--")
+    plt.plot(time, noise_t_segment, label="Noise (random segment)", color="red", alpha=0.7)
+    plt.title("T Component: Filtered Data, Reference, and Noise")
+    plt.xlabel("Time (s)")
+    plt.ylabel("Amplitude")
+    plt.legend()
+    plt.grid()
 
-    # # (b) Covariance matrices (if fit succeeded)
-    # if (CD_z is not None) and (CD_t is not None):
-    #     plt.figure(figsize=(12, 5))
+    plt.tight_layout()
+    plt.show(block=False)
+    plt.pause(0.1)
 
-    #     plt.subplot(1, 2, 1)
-    #     plt.imshow(CD_z, origin="lower", cmap="viridis", aspect="auto")
-    #     plt.colorbar(label="Covariance")
-    #     plt.title("Covariance Matrix: Z Component")
-    #     plt.xlabel("Sample index")
-    #     plt.ylabel("Sample index")
+    # (b) Covariance matrices (if fit succeeded)
+    if (CD_z is not None) and (CD_t is not None):
+        plt.figure(figsize=(12, 5))
 
-    #     plt.subplot(1, 2, 2)
-    #     plt.imshow(CD_t, origin="lower", cmap="viridis", aspect="auto")
-    #     plt.colorbar(label="Covariance")
-    #     plt.title("Covariance Matrix: T Component")
-    #     plt.xlabel("Sample index")
-    #     plt.ylabel("Sample index")
+        plt.subplot(1, 2, 1)
+        plt.imshow(CD_z, origin="lower", cmap="viridis", aspect="auto")
+        plt.colorbar(label="Covariance")
+        plt.title("Covariance Matrix: Z Component")
+        plt.xlabel("Sample index")
+        plt.ylabel("Sample index")
 
-    #     plt.tight_layout()
-    #     plt.show(block=False)
-    #     plt.pause(0.1)
+        plt.subplot(1, 2, 2)
+        plt.imshow(CD_t, origin="lower", cmap="viridis", aspect="auto")
+        plt.colorbar(label="Covariance")
+        plt.title("Covariance Matrix: T Component")
+        plt.xlabel("Sample index")
+        plt.ylabel("Sample index")
+
+        plt.tight_layout()
+        plt.show(block=False)
+        plt.pause(0.1)

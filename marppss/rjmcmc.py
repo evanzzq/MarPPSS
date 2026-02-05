@@ -166,6 +166,39 @@ def calc_like_prob_gv(model, bookkeeping):
     
     return logL_gv
 
+def calc_like_prob_avg_vs(model, bookkeeping):
+
+    # define avg vs reference and uncertainty
+    # edit these based on data
+    avg_vs_ref = 3.5
+    avg_vs_unc = 0.1
+    
+    # define vpvsr
+    if bookkeeping.fitrho or bookkeeping.mode == 3:
+        vpvsr = model.rho
+    else:
+        vpvsr = 1.8
+
+    # define vs
+    if bookkeeping.mode == 1: 
+        vp = model.v
+        vs = vp / vpvsr
+    if bookkeeping.mode == 2: 
+        vs = model.v
+        vp = vs * vpvsr
+    if bookkeeping.mode == 3:
+        vs = model.v
+        vp = model.v * vpvsr
+
+    # calculate avg vs in model
+    avg_vs_model = np.sum(model.H * vs[:-1]) / np.sum(model.H)
+    
+    diff_avg_vs = (avg_vs_model - avg_vs_ref)
+    avg_vs_unc *= np.exp(0.5 * model.loge_avg_vs)
+    logL_avg_vs = -0.5 * np.sum((diff_avg_vs / avg_vs_unc) ** 2)
+    
+    return logL_avg_vs
+
 import copy
 import numpy as np
 
@@ -379,6 +412,16 @@ def update_loge_gv(model, prior):
         return model_new, True
     return model, False
 
+def update_loge_avg_vs(model, prior):
+    # Copy model
+    model_new = copy.deepcopy(model)
+    # Update
+    model_new.loge_avg_vs += prior.logeStd * np.random.randn()
+    # Check range and return
+    if prior.logeRange[0] <= model_new.loge_avg_vs <= prior.logeRange[1]:
+        return model_new, True
+    return model, False
+
 def update_v(model, prior, rayp):
     # Copy model
     model_new = copy.deepcopy(model)
@@ -448,6 +491,7 @@ def rjmcmc_run(P, D, prior, bookkeeping, saveDir, CDinv=None):
     logL_trace = []
     if bookkeeping.mode in (1, 2):
         logL = calc_like_prob(P, D, model, prior, bookkeeping, CDinv=CDinv)
+        # fitgv and fitavgvs - only max 1 should be turned on
         if bookkeeping.fitgv: 
             logL_gv_trace = []
             logL_wf_trace = []
@@ -455,17 +499,32 @@ def rjmcmc_run(P, D, prior, bookkeeping, saveDir, CDinv=None):
             logL_gv = calc_like_prob_gv(model, bookkeeping)
             logL_gv_trace.append(logL_gv)
             logL += logL_gv
+        if bookkeeping.fitavgvs:
+            logL_avg_vs_trace = []
+            logL_avg_vs = calc_like_prob_avg_vs(model, bookkeeping)
+            logL_avg_vs_trace.append(logL_avg_vs)
+            logL += logL_avg_vs
         logL_trace.append(logL)
     elif bookkeeping.mode == 3:
         logL_PP_trace, logL_SS_trace = [], []
         logL, logL_PP, logL_SS = calc_like_prob_joint(
             P_PP, P_SS, D_PP, D_SS, 
             model, prior, bookkeeping, CDinv_PP=CDinv_PP, CDinv_SS=CDinv_SS)
+        # fitgv and fitavgvs - only max 1 should be turned on
         if bookkeeping.fitgv: 
             logL_gv_trace = []
+            logL_wf_trace = []
+            logL_wf_trace.append(logL)
             logL_gv = calc_like_prob_gv(model, bookkeeping)
             logL_gv_trace.append(logL_gv)
             logL += logL_gv
+        if bookkeeping.fitavgvs:
+            logL_avg_vs_trace = []
+            logL_wf_trace = []
+            logL_wf_trace.append(logL)
+            logL_avg_vs = calc_like_prob_avg_vs(model, bookkeeping)
+            logL_avg_vs_trace.append(logL_avg_vs)
+            logL += logL_avg_vs
         logL_trace.append(logL)
         logL_PP_trace.append(logL_PP)
         logL_SS_trace.append(logL_SS)
@@ -476,14 +535,15 @@ def rjmcmc_run(P, D, prior, bookkeeping, saveDir, CDinv=None):
     ensemble = []
 
     # Action pool
-    actionPool = [2,3,8] # H, w, v
+    actionPool = [2,3,9] # H, w, v
     if prior.maxN > 1: actionPool = np.append(actionPool, [0,1]) # birth, death
     if bookkeeping.mode == 3: actionPool = np.append(actionPool, [4]) # w2
-    if bookkeeping.mode == 3 or (bookkeeping.fitgv and bookkeeping.fitrho): actionPool = np.append(actionPool, [9]) # rho
+    if bookkeeping.mode == 3 or (bookkeeping.fitgv and bookkeeping.fitrho): actionPool = np.append(actionPool, [10]) # rho
     if bookkeeping.fitLoge:
         if bookkeeping.mode in [1, 2]: actionPool = np.append(actionPool, [5]) # loge
         if bookkeeping.mode == 3: actionPool = np.append(actionPool, [5,6]) # loge and loge2
     # if bookkeeping.fitgv: actionPool = np.append(actionPool, [7]) # loge_gv # commented out so loge_gv === 0
+    # if bookkeeping.fitavgvs: actionPool = np.append(actionPool, [8])
 
     for iStep in range(totalSteps):
 
@@ -508,8 +568,10 @@ def rjmcmc_run(P, D, prior, bookkeeping, saveDir, CDinv=None):
             elif action == 7:
                 model_new, _ = update_loge_gv(model_new, prior)
             elif action == 8:
-                model_new, _ = update_v(model_new, prior, bookkeeping.rayp)
+                model_new, _ = update_loge_avg_vs(model_new, prior)
             elif action == 9:
+                model_new, _ = update_v(model_new, prior, bookkeeping.rayp)
+            elif action == 10:
                 model_new, _ = update_rho(model_new, prior, bookkeeping.rayp)
 
         # Compute likelihood
@@ -522,11 +584,15 @@ def rjmcmc_run(P, D, prior, bookkeeping, saveDir, CDinv=None):
         if bookkeeping.fitgv: 
             new_logL_gv = calc_like_prob_gv(model_new, bookkeeping)
             new_logL += new_logL_gv
+        if bookkeeping.fitavgvs: 
+            new_logL_avg_vs = calc_like_prob_avg_vs(model_new, bookkeeping)
+            new_logL += new_logL_avg_vs
 
         # Acceptance probability
         log_accept_ratio = ((new_logL - logL) 
                             + n_len * ((model.loge - model_new.loge) + (model.loge2 - model_new.loge2)) 
-                            + 2 * (model.loge_gv - model_new.loge_gv))
+                            + 2 * (model.loge_gv - model_new.loge_gv)
+                            + (model.loge_avg_vs - model_new.loge_avg_vs))
 
         if np.log(np.random.rand()) < log_accept_ratio:
             model = model_new
@@ -536,6 +602,8 @@ def rjmcmc_run(P, D, prior, bookkeeping, saveDir, CDinv=None):
                 logL_SS = new_logL_SS
             if bookkeeping.fitgv:
                 logL_gv = new_logL_gv
+            if bookkeeping.fitavgvs:
+                logL_avg_vs = new_logL_avg_vs
         
         logL_trace.append(logL)
         if bookkeeping.mode == 3:
@@ -544,6 +612,9 @@ def rjmcmc_run(P, D, prior, bookkeeping, saveDir, CDinv=None):
         if bookkeeping.fitgv:
             logL_gv_trace.append(logL_gv)
             logL_wf_trace.append(logL - logL_gv)
+        if bookkeeping.fitavgvs:
+            logL_avg_vs_trace.append(logL_avg_vs)
+            logL_wf_trace.append(logL - logL_avg_vs)
 
         # Save only selected models after burn-in
         if iStep >= burnInSteps and (iStep - burnInSteps) % save_interval == 0:
@@ -562,19 +633,33 @@ def rjmcmc_run(P, D, prior, bookkeeping, saveDir, CDinv=None):
             plt.close(fig)
 
             # Also save waveform vs. group velocity misfit
-            if bookkeeping.mode in (1,2) and bookkeeping.fitgv:
-                fig, ax = plt.subplots()
-                ax.plot(logL_wf_trace, 'k-', label="waveform")
-                ax.plot(logL_gv_trace, 'r-', label="group vel.")
-                ymin = min(logL_wf_trace[-1], logL_gv_trace[-1]) - 0.1 * abs(logL_wf_trace[-1] - logL_gv_trace[-1])
-                ymax = max(logL_wf_trace[-1], logL_gv_trace[-1]) + 0.1 * abs(logL_wf_trace[-1] - logL_gv_trace[-1])
-                ax.set_ylim(ymin, ymax)
-                ax.set_xscale('log')
-                ax.set_xlabel("Step")
-                ax.set_ylabel("log Likelihood")
-                fig.tight_layout()
-                fig.savefig(os.path.join(saveDir, "logL_wf_gv.png"))  # overwrites each time
-                plt.close(fig)
+            if bookkeeping.mode in (1,2):
+                if bookkeeping.fitgv:
+                    fig, ax = plt.subplots()
+                    ax.plot(logL_wf_trace, 'k-', label="waveform")
+                    ax.plot(logL_gv_trace, 'r-', label="group vel.")
+                    ymin = min(logL_wf_trace[-1], logL_gv_trace[-1]) - 0.1 * abs(logL_wf_trace[-1] - logL_gv_trace[-1])
+                    ymax = max(logL_wf_trace[-1], logL_gv_trace[-1]) + 0.1 * abs(logL_wf_trace[-1] - logL_gv_trace[-1])
+                    ax.set_ylim(ymin, ymax)
+                    ax.set_xscale('log')
+                    ax.set_xlabel("Step")
+                    ax.set_ylabel("log Likelihood")
+                    fig.tight_layout()
+                    fig.savefig(os.path.join(saveDir, "logL_wf_gv.png"))  # overwrites each time
+                    plt.close(fig)
+                if bookkeeping.fitavgvs:
+                    fig, ax = plt.subplots()
+                    ax.plot(logL_wf_trace, 'k-', label="waveform")
+                    ax.plot(logL_gv_trace, 'r-', label="avg vs")
+                    ymin = min(logL_wf_trace[-1], logL_avg_vs_trace[-1]) - 0.1 * abs(logL_wf_trace[-1] - logL_avg_vs_trace[-1])
+                    ymax = max(logL_wf_trace[-1], logL_avg_vs_trace[-1]) + 0.1 * abs(logL_wf_trace[-1] - logL_avg_vs_trace[-1])
+                    ax.set_ylim(ymin, ymax)
+                    ax.set_xscale('log')
+                    ax.set_xlabel("Step")
+                    ax.set_ylabel("log Likelihood")
+                    fig.tight_layout()
+                    fig.savefig(os.path.join(saveDir, "logL_wf_avgvs.png"))  # overwrites each time
+                    plt.close(fig)
 
             # Save PP/SS plots for mode 3
             if bookkeeping.mode == 3:
@@ -582,6 +667,7 @@ def rjmcmc_run(P, D, prior, bookkeeping, saveDir, CDinv=None):
                 ax.plot(logL_PP_trace, 'b-', label="PP")
                 ax.plot(logL_SS_trace, 'r-', label="SS")
                 if bookkeeping.fitgv: ax.plot(logL_gv_trace, 'k-', label="group vel.")
+                if bookkeeping.fitavgvs: ax.plot(logL_avg_vs_trace, 'k-', label="avg vs")
                 ymin = min(logL_SS_trace[-1], logL_PP_trace[-1]) - 0.1 * abs(logL_SS_trace[-1] - logL_PP_trace[-1])
                 ymax = max(logL_SS_trace[-1], logL_PP_trace[-1]) + 0.1 * abs(logL_SS_trace[-1] - logL_PP_trace[-1])
                 ax.set_ylim(ymin, ymax)

@@ -25,6 +25,7 @@ common:
   useCD: false
   fitLoge: true
   fitgv: false
+  fitavgvs: false
   fitrho: false
   
   # more default settings
@@ -33,22 +34,22 @@ common:
   stdSS: 0.01
   
   # rjmcmc parameters
-  totalSteps: 400000
-  burnInSteps: 300000
+  totalSteps: 2000000
+  burnInSteps: 1600000
   nSaveModels: 200
   actionsPerStep: 1
-  num_chains: 16
+  num_chains: 8
 
   ###################
   # event specifics #
   ###################
 
-  # # S1000a
-  # PPfreq: [0.2, 0.6]
-  # SSfreq: [0.2, 0.6]
+  # S1000a
+  # PPfreq: [0.2, 0.5]
+  # SSfreq: [0.2, 0.5]
   # rayp: [0.0983, 0.1907]
-  # PParr: "2021-09-18T18:01:48.360"
-  # SSarr: "2021-09-18T18:14:04.560"
+  # PParr: "2021-09-18T18:01:49.000"
+  # SSarr: "2021-09-18T18:14:05.000"
 
   # S0976a
   PPfreq: [0.1666666667, 0.3571428571]
@@ -59,39 +60,14 @@ common:
 
 experiments:
 
-  # - evname: "S1000a" # name of event in raw data dir
-  #   dtype: "VEL"
-  #   src_sigma: 2.0
-  #   rayp: 0.0983
-  #   useCD: false
-
-  #   mode: 1                     # 1=PP, 2=SS, 3=joint
-  #   maxN: 50
-  #   fitRange: [5, 30]
-  #   fitLoge: true
-  #   fitgv: true
-  #   fitrho: true
-  #   runname: "run1_16c_maxN50_PP_gv_unc_noPPini2"
-
-  # - evname: "S1000a" # name of event in raw data dir
-  #   dtype: "VEL"
-  #   src_sigma: 3.0
-  #   rayp: 0.0983
-  #   useCD: false
-
-  #   mode: 1                     # 1=PP, 2=SS, 3=joint
-  #   maxN: 50
-  #   fitRange: [5, 30]
-  #   fitLoge: true
-  #   fitgv: true
-  #   fitrho: true
-  #   runname: "run1_16c_maxN50_PP_gv_unc_noPPini2"
-
-  - evname: "S0976a" # name of event in raw data dir
+  - evname: "S0976a_pzfiltered" # name of event in raw data dir
     dtype: "DISP"
     src_sigma: 3.0
-    rayp: [0.08181493934, 0.1712366396]
     useCD: false
+    fitavgvs: true
+    fitgv: false
+    fitLoge: false
+    fitrho: true
 
     # prior ranges
     HRange: [1., 60.0]
@@ -101,7 +77,9 @@ experiments:
     rhoRange: [1.7, 2.0]
 
     mode: 3                     # 1=PP, 2=SS, 3=joint
-    maxN: 50
-    fitRange: [0,30,0,50]
+    maxN: 1
+    stdPP: 0.005
+    stdSS: 0.005
+    fitRange: [2,20,10,30]
     fitLoge: true
-    runname: "run1_16c_maxN50_joint"
+    runname: "run1_8c_maxN1_joint_avgvs_loge"

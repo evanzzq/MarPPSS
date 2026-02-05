@@ -8,6 +8,7 @@ class Bookkeeping:
     fitRange:       np.ndarray = None # mode 1/2: [tmin, tmax]; mode 3: [tmin_PP, tmax_PP, tmin_SS, tmax_SS]
     fitLoge:        bool = True
     fitgv:          bool = False
+    fitavgvs:       bool = False
     fitrho:         bool = False # only refers to fitgv scenario
     totalSteps:     int = int(1e6)
     burnInSteps:    int = None
@@ -19,8 +20,8 @@ class Bookkeeping:
             self.burnInSteps = int(self.totalSteps // 2)
 @dataclass
 class Prior:
-    stdPP: float = 0.1
-    stdSS: float = 0.1
+    stdPP: float = 0.01
+    stdSS: float = 0.015
     maxN: int = 2
     dt: float = None
     tlen: float = None # half length in seconds
@@ -58,6 +59,7 @@ class Model:
     loge: float # relative error for mode 1/2
     loge2: float # in mode 3 (joint), loge is for PP and loge2 is for SS
     loge_gv: float # for group velocity measurements
+    loge_avg_vs: float # for average vs fit
     v: np.ndarray # len(v) = len(H) + 1
     rho: np.ndarray # len(rho) = len(v) = len(H) + 1
 
@@ -69,9 +71,10 @@ class Model:
             H=np.random.uniform(prior.HRange[0], prior.HRange[1], 1),
             w=np.ones(1),
             w2=np.ones(1),
-            loge=10.,
-            loge2=10.,
+            loge=0.,
+            loge2=0.,
             loge_gv=0.,
+            loge_avg_vs = 0.,
             v = np.sort(np.random.uniform(prior.vRange[0], prior.vRange[1], 2)),
             rho=np.random.uniform(prior.rhoRange[0], prior.rhoRange[1], 2) # rho will be ignore in mode 1/2
         )

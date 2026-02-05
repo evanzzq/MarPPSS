@@ -126,9 +126,13 @@ def plot_velocity_ensemble(models,
         first_vp = True
 
         for m in models:
-            vp = np.asarray(m.v, dtype=float)
-            ratio = np.asarray(m.rho, dtype=float)   # here rho = Vp/Vs
-            vs = vp / ratio
+            vpvsr = np.asarray(m.rho, dtype=float)
+            if mode == 1: 
+                vp = np.asarray(m.v, dtype=float)
+                vs = vp / vpvsr
+            elif mode in (2, 3):
+                vs = np.asarray(m.v, dtype=float)
+                vp = vs * vpvsr
 
             # Vs profile
             vx_vs, z_vs = _model_to_step_profile(m.H, vs, HRange)
@@ -222,7 +226,7 @@ def sample_models_to_depth_grid(models, bookkeeping, HRange, nz=200):
             vp = np.asarray(m.v, dtype=float)
             ratio = np.asarray(m.rho, dtype=float)  # rho = Vp/Vs
             vs = vp / ratio
-            v_layer = vp
+            v_layer = ratio
         else:
             raise ValueError(f"Unsupported mode={mode} for sampling.")
 
@@ -290,24 +294,41 @@ def plot_velocity_density_image(models,
     z_centers = 0.5 * (z_edges[:-1] + z_edges[1:])
     v_centers = 0.5 * (v_edges[:-1] + v_edges[1:])
 
-    # Plot
+    # ---- Normal figure for viewing ----
     plt.figure(figsize=(5, 7))
-    # Percentile-based dynamic color limits
-    lo = np.percentile(density, 2)    # 5th percentile
-    hi = np.percentile(density, 98)   # 95th percentile
-    plt.pcolormesh(v_centers, z_centers, density, shading="auto", cmap=cmap, vmin=lo, vmax=hi)
-    cbar = plt.colorbar(label="Density")
+    lo = np.percentile(density, 50)
+    hi = np.percentile(density, 97)
+
+    im = plt.pcolormesh(v_centers, z_centers, density, shading="auto",
+                        cmap=cmap, vmin=lo, vmax=hi)
+    plt.colorbar(label="Density")
 
     plt.xlabel("Velocity (km/s)")
     plt.ylabel("Depth (km)")
-    plt.xlim(1.5, 8)
-    plt.gca().invert_yaxis()  # depth increasing downward
+    plt.xlim(1.75, 1.95)
+    plt.gca().invert_yaxis()
     plt.title("Velocity ensemble density (v vs depth)")
     plt.grid(alpha=0.2)
     plt.tight_layout()
     plt.show()
 
-    return v_centers, z_centers, density
+    # ---- Clean PNG export (no axes, no labels, no colorbar, no title) ----
+    fig2, ax2 = plt.subplots(figsize=(5, 7))
+    ax2.pcolormesh(v_centers, z_centers, density, shading="auto",
+                cmap=cmap, vmin=lo, vmax=hi)
+
+    # match limits
+    # ax2.set_xlim(1.5, 8)
+    ax2.invert_yaxis()
+
+    # remove everything
+    ax2.set_axis_off()
+
+    plt.savefig("vel_ensemble_clean.png",
+                dpi=400,
+                bbox_inches='tight',
+                pad_inches=0)
+    plt.close(fig2)
 
 def plot_predicted_vs_input(ensemble, P, D_obs, prior, bookkeeping):
     """

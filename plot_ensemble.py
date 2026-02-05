@@ -9,12 +9,12 @@ from marppss.visualization import plot_velocity_ensemble, plot_posterior_num_pha
 filedir = "/Users/evanzhang/zzq@umd.edu - Google Drive/My Drive/Research/MarPPSS"
 
 # ---- User-defined experiment/run ----
-expname = "S1000a_src_2.0_s_PP"   # folder under run/
-runname = "fake_run_2"                     # subfolder under that
+expname = "S0976a_pzfiltered_src_3.0_s_joint"   # folder under run/
+runname = "run1_8c_maxN1_joint_avgvs_loge"                     # subfolder under that
 
 # ---- Explicit data dirs (user-specified) ----
-PPdir = "S1000a_src_2.0_s_PP"        # folder under data/
-SSdir = "S1000a_src_2.0_s_SS"        # folder under data/
+PPdir = "S0976a_pzfiltered_src_3.0_s_PP"        # folder under data/
+SSdir = "S0976a_pzfiltered_src_3.0_s_SS"        # folder under data/
 
 PP_dir = os.path.join(filedir, "data", PPdir)
 SS_dir = os.path.join(filedir, "data", SSdir)
@@ -165,8 +165,7 @@ else:
 # -----------------------------------------------------------
 
 plot_velocity_ensemble(ensemble_all, bookkeeping, prior.HRange)
-v_centers, z_centers, density = plot_velocity_density_image(
-    ensemble_all, bookkeeping, prior.HRange, nz=200, nv=200, smooth_sigma=2.0)
+plot_velocity_density_image(ensemble_all, bookkeeping, prior.HRange, nz=200, nv=200, smooth_sigma=2.0)
 
 plot_predicted_vs_input(ensemble_all, P, D, prior, bookkeeping)
 plot_posterior_error_params(ensemble_all, bookkeeping)
