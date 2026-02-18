@@ -17,9 +17,9 @@ common:
   # prior ranges
   HRange: [1., 60.0]
   wRange: [0.5, 1.5]
-  vRange: [4.0, 8.0]
+  vRange: [1.0, 4.0]
   logeRange: [0., 10.]
-  rhoRange: [1.7, 2.0]
+  rhoRange: [1.5, 2.2]
 
   # default CD and rel. error
   useCD: false
@@ -30,12 +30,12 @@ common:
   
   # more default settings
   maxN: 1
-  stdPP: 0.01 # 0.34 ~= 0.01 * exp(3.5)
-  stdSS: 0.01
+  stdPP: 0.04 # 0.34 ~= 0.01 * exp(3.5)
+  stdSS: 0.04
   
   # rjmcmc parameters
-  totalSteps: 2000000
-  burnInSteps: 1600000
+  totalSteps: 1000000
+  burnInSteps: 800000
   nSaveModels: 200
   actionsPerStep: 1
   num_chains: 8
@@ -48,8 +48,8 @@ common:
   # PPfreq: [0.2, 0.5]
   # SSfreq: [0.2, 0.5]
   # rayp: [0.0983, 0.1907]
-  # PParr: "2021-09-18T18:01:49.000"
-  # SSarr: "2021-09-18T18:14:05.000"
+  # PParr: "2021-09-18T18:02:03.000"
+  # SSarr: "2021-09-18T18:14:02.000"
 
   # S0976a
   PPfreq: [0.1666666667, 0.3571428571]
@@ -60,26 +60,22 @@ common:
 
 experiments:
 
-  - evname: "S0976a_pzfiltered" # name of event in raw data dir
+  - evname: "S0976asdr_1877" # name of event in raw data dir
     dtype: "DISP"
     src_sigma: 3.0
     useCD: false
     fitavgvs: true
     fitgv: false
-    fitLoge: false
-    fitrho: true
-
-    # prior ranges
-    HRange: [1., 60.0]
-    wRange: [0.5, 1.5]
-    vRange: [1.5, 5.0]
-    logeRange: [0., 10.]
-    rhoRange: [1.7, 2.0]
-
-    mode: 3                     # 1=PP, 2=SS, 3=joint
-    maxN: 1
-    stdPP: 0.005
-    stdSS: 0.005
-    fitRange: [2,20,10,30]
     fitLoge: true
-    runname: "run1_8c_maxN1_joint_avgvs_loge"
+    fitrho: true
+    fitRange: [0,30,0,40]
+
+    totalSteps: 100000
+    burnInSteps: 80000
+    nSaveModels: 200
+    actionsPerStep: 1
+    num_chains: 2
+
+    mode: 3                    # 1=PP, 2=SS, 3=joint
+    maxN: 50
+    runname: "run1_2c_maxN50_joint_avgvs_loge"

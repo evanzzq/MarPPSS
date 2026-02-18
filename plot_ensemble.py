@@ -9,12 +9,12 @@ from marppss.visualization import plot_velocity_ensemble, plot_posterior_num_pha
 filedir = "/Users/evanzhang/zzq@umd.edu - Google Drive/My Drive/Research/MarPPSS"
 
 # ---- User-defined experiment/run ----
-expname = "S0976a_pzfiltered_src_3.0_s_joint"   # folder under run/
-runname = "run1_8c_maxN1_joint_avgvs_loge"                     # subfolder under that
+expname = "S0976asdr_1877_src_3.0_s_joint"   # folder under run/
+runname = "run1_2c_maxN50_joint_avgvs_loge"                     # subfolder under that
 
 # ---- Explicit data dirs (user-specified) ----
-PPdir = "S0976a_pzfiltered_src_3.0_s_PP"        # folder under data/
-SSdir = "S0976a_pzfiltered_src_3.0_s_SS"        # folder under data/
+PPdir = "S0976asdr_1877_src_3.0_s_PP"        # folder under data/
+SSdir = "S0976asdr_1877_src_3.0_s_SS"        # folder under data/
 
 PP_dir = os.path.join(filedir, "data", PPdir)
 SS_dir = os.path.join(filedir, "data", SSdir)

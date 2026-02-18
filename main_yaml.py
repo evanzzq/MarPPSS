@@ -115,6 +115,7 @@ if __name__ == "__main__":
 
         PP_dir = os.path.join(exp_vars["outdir"], "data", evname + save_suffix + "_PP")
         SS_dir = os.path.join(exp_vars["outdir"], "data", evname + save_suffix + "_SS")
+        print(PP_dir)
 
         exp_vars["PP_dir"] = PP_dir
         exp_vars["SS_dir"] = SS_dir

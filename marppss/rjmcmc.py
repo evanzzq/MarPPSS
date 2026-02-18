@@ -170,7 +170,7 @@ def calc_like_prob_avg_vs(model, bookkeeping):
 
     # define avg vs reference and uncertainty
     # edit these based on data
-    avg_vs_ref = 3.5
+    avg_vs_ref = 3.077
     avg_vs_unc = 0.1
     
     # define vpvsr
