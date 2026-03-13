@@ -2,19 +2,19 @@ import os
 import pickle
 import numpy as np
 import matplotlib.pyplot as plt
-from marppss.visualization import plot_velocity_ensemble, plot_posterior_num_phases, plot_predicted_vs_input, plot_posterior_error_params, plot_posterior_group_velocities, plot_velocity_density_image
+from marppss.visualization import plot_velocity_ensemble, plot_posterior_num_phases, plot_predicted_vs_input, plot_posterior_error_params, plot_posterior_group_velocity_density, plot_velocity_density_image
 
 # ==== Config ====
-# filedir = "H:/My Drive/Research/MarPPSS"
-filedir = "/Users/evanzhang/zzq@umd.edu - Google Drive/My Drive/Research/MarPPSS"
+filedir = "H:/My Drive/Research/MarPPSS"
+# filedir = "/Users/evanzhang/zzq@umd.edu - Google Drive/My Drive/Research/MarPPSS"
 
 # ---- User-defined experiment/run ----
-expname = "S0976asdr_1877_src_3.0_s_PP"   # folder under run/
-runname = "run2_8c_maxN50_joint_gv_log_3_40"                     # subfolder under that
+expname = "S0976asdr_1877_src_3.5_s_PP"   # folder under run/
+runname = "run3_8c_maxN50_joint_PPTT_gv"                     # subfolder under that
 
 # ---- Explicit data dirs (user-specified) ----
-PPdir = "S0976asdr_1877_src_3.0_s_PP"        # folder under data/
-SSdir = "S0976asdr_1877_src_3.0_s_SS"        # folder under data/
+PPdir = "S0976asdr_1877_src_3.5_s_PP"        # folder under data/
+SSdir = "S0976asdr_1877_src_3.5_s_SS"        # folder under data/
 
 PP_dir = os.path.join(filedir, "data", PPdir)
 SS_dir = os.path.join(filedir, "data", SSdir)
@@ -177,22 +177,22 @@ plot_posterior_num_phases(ensemble_all)
 # gv_obs  = np.array([2.726, 2.829])
 
 # reflectivity synthetics
-periods = np.linspace(1.0, 40.0, 40)
+periods = np.geomspace(1.0, 40.0, 30)
 gv_obs = np.array([
-    1.72839653, 1.72837877, 1.72668886, 1.71786654, 1.69656754, 1.66145027,
-    1.61350799, 1.55622542, 1.49543488, 1.43975198, 1.40036607, 1.38716733,
-    1.40364349, 1.44419086, 1.49859321, 1.5582273 , 1.61862147, 1.67796528,
-    1.73590863, 1.79222584, 1.84663725, 1.89899302, 1.94907331, 1.99699152,
-    2.04305935, 2.08771873, 2.13145232, 2.17471385, 2.21789861, 2.26130128,
-    2.30510902, 2.34945178, 2.39400196, 2.43886352, 2.48355818, 2.52794838,
-    2.57183361, 2.61504436, 2.65710568, 2.69810677
+    1.7283139, 1.72831515, 1.72831393, 1.72831515, 1.72831393, 1.72826754,
+    1.7282236,  1.72805153, 1.7274429,  1.72600227, 1.72294824, 1.71701786,
+    1.70661801, 1.68973353, 1.66400285, 1.62690315, 1.57666305, 1.51391183,
+    1.4462376,  1.39545547, 1.39696771, 1.46827693, 1.58370326, 1.71566555,
+    1.85606703, 1.9992589,  2.14497363, 2.30599601, 2.4935115,  2.69799281
 ])
-
 if bookkeeping.fitgv:
-    plot_posterior_group_velocities(
-        ensemble_all,
+    plot_posterior_group_velocity_density(
+        ensemble,
         bookkeeping,
-        periods=periods,
+        periods,
         gv_true=gv_obs,
-        vpvsr=1.8
+        vpvsr=1.8,
+        wave="rayleigh",
+        mode_idx=0,   # disba fundamental mode
+        n_vel=200
     )

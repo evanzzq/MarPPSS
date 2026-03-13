@@ -595,40 +595,25 @@ def plot_posterior_num_phases(ensemble, bins=None, figsize=(6, 4), density=False
     plt.tight_layout()
     plt.show()
 
+import numpy as np
+import matplotlib.pyplot as plt
+from disba import GroupDispersion
+
 def compute_gv_for_model(model, bookkeeping, periods, vpvsr=1.8,
-                         wave="rayleigh", mode=1, flat_earth=True):
+                         wave="rayleigh", mode=0):
     """
-    Compute group velocities for a single Model using pysurf96.
-
-    Parameters
-    ----------
-    model : Model
-    bookkeeping : object
-        Has attribute 'mode' (1, 2, or 3).
-    periods : array_like
-        Periods at which to compute group velocities.
-    vpvsr : float
-        Fixed Vp/Vs ratio for modes 1 and 2.
-    wave : str
-        surf96 wave type ("rayleigh" or "love").
-    mode : int
-        surf96 mode index (1 = fundamental).
-    flat_earth : bool
-        Passed to surf96.
-
-    Returns
-    -------
-    gv_model : np.ndarray
-        Group velocities for the given model at the specified periods.
-        Shape: (len(periods),)
+    Compute group velocities for a single Model using disba.
     """
-
-    from pysurf96 import surf96
 
     periods = np.asarray(periods, dtype=float)
 
-    # Layer thicknesses: append 0 for half-space
-    H = np.append(model.H, 0.0)
+    # convert interface depths to layer thicknesses, then append 0 for half-space
+    H_interfaces = np.asarray(model.H, dtype=float)
+    if H_interfaces.size == 0:
+        H = np.array([0.0])
+    else:
+        thickness = np.diff(np.r_[0.0, H_interfaces])
+        H = np.r_[thickness, 0.0]
 
     if bookkeeping.mode == 1:
         vp = np.asarray(model.v, dtype=float)
@@ -638,73 +623,38 @@ def compute_gv_for_model(model, bookkeeping, periods, vpvsr=1.8,
         vp = vs * vpvsr
     elif bookkeeping.mode == 3:
         vs = np.asarray(model.v, dtype=float)
-        # rho in this mode holds VP/VS ratio
         vp = vs * np.asarray(model.rho, dtype=float)
     else:
         raise ValueError(f"Unsupported bookkeeping.mode = {bookkeeping.mode}")
 
-    # Simple rho model
-    rho = vs * 0.8
+    rho = 0.8 * vs
 
-    gv_model = surf96(
-        H,
-        vp,
-        vs,
-        rho,
-        periods,
-        wave=wave,
-        mode=mode,
-        velocity="group",
-        flat_earth=flat_earth
-    )
+    disp = GroupDispersion(H, vp, vs, rho)
+    gv_model = disp(periods, mode=mode, wave=wave).velocity
 
     return np.asarray(gv_model, dtype=float)
 
-def plot_posterior_group_velocities(ensemble, bookkeeping,
-                                    periods, gv_true,
-                                    vpvsr=1.8,
-                                    wave="rayleigh", mode_idx=1,
-                                    bins=30, density=True,
-                                    figsize=(6, 5)):
-    """
-    For each model in the ensemble, compute group velocities with surf96,
-    then plot posterior histograms at each period, with vertical lines for
-    the "true" values.
 
-    Parameters
-    ----------
-    ensemble : list[Model]
-        Posterior samples (after burn-in).
-    bookkeeping : object
-        Has attribute 'mode' (1, 2, or 3).
-    periods : array_like
-        Periods at which gv is measured. Shape (n_per,).
-    gv_true : array_like
-        True or observed group velocities at the same periods. Shape (n_per,).
-    vpvsr : float
-        Fixed Vp/Vs ratio for modes 1 and 2.
-    wave : str
-        Wave type for surf96 ("rayleigh" or "love").
-    mode_idx : int
-        Mode index for surf96 (1 = fundamental).
-    bins : int
-        Number of bins for each histogram.
-    density : bool
-        Whether to normalize histograms.
-    figsize : tuple
-        Base figure size; height will be scaled by number of periods.
+def plot_posterior_group_velocity_density(
+    ensemble, bookkeeping, periods, gv_true=None,
+    vpvsr=1.8, wave="rayleigh", mode_idx=0,
+    n_vel=200, vel_pad_frac=0.05,
+    figsize=(7, 5), cmap="viridis",
+    show_colorbar=True
+):
+    """
+    Plot posterior group-velocity distributions in one panel:
+    x = period, y = group velocity, color = posterior probability
+    normalized independently for each period.
+
+    So for each period, the maximum posterior density is scaled to 1.
     """
 
     periods = np.asarray(periods, dtype=float)
-    gv_true = np.asarray(gv_true, dtype=float)
-
-    if periods.shape != gv_true.shape:
-        raise ValueError("periods and gv_true must have the same shape.")
-
     n_models = len(ensemble)
     n_per = len(periods)
 
-    # Compute gv for every model
+    # compute gv for all models
     gv_all = np.empty((n_models, n_per), dtype=float)
     for i, m in enumerate(ensemble):
         gv_all[i, :] = compute_gv_for_model(
@@ -712,21 +662,57 @@ def plot_posterior_group_velocities(ensemble, bookkeeping,
             vpvsr=vpvsr, wave=wave, mode=mode_idx
         )
 
-    fig, axes = plt.subplots(n_per, 1,
-                             figsize=(figsize[0], figsize[1] * n_per),
-                             squeeze=False)
-    axes = axes.ravel()
+    # common velocity grid
+    gv_min = np.min(gv_all)
+    gv_max = np.max(gv_all)
+    gv_span = gv_max - gv_min
+    gv_min -= vel_pad_frac * gv_span
+    gv_max += vel_pad_frac * gv_span
+
+    vel_edges = np.linspace(gv_min, gv_max, n_vel + 1)
+
+    # build image: rows = velocity bins, cols = periods
+    Z = np.zeros((n_vel, n_per), dtype=float)
 
     for iper in range(n_per):
-        ax = axes[iper]
-        vals = gv_all[:, iper]
+        hist, _ = np.histogram(gv_all[:, iper], bins=vel_edges, density=False)
+        hist = hist.astype(float)
 
-        ax.hist(vals, bins=bins, density=density)
-        ax.axvline(gv_true[iper], linestyle="--")  # true value
+        # normalize each period slice by its own maximum
+        if np.max(hist) > 0:
+            hist /= np.max(hist)
 
-        ax.set_title(f"Group velocity at period = {periods[iper]:.2f} s")
-        ax.set_xlabel("Group velocity (km/s)")
-        ax.set_ylabel("Density" if density else "Count")
+        Z[:, iper] = hist
+
+    # period edges for pcolormesh
+    if n_per == 1:
+        dp = 0.5
+        per_edges = np.array([periods[0] - dp, periods[0] + dp])
+    else:
+        per_edges = np.empty(n_per + 1)
+        per_edges[1:-1] = 0.5 * (periods[:-1] + periods[1:])
+        per_edges[0] = periods[0] - 0.5 * (periods[1] - periods[0])
+        per_edges[-1] = periods[-1] + 0.5 * (periods[-1] - periods[-2])
+
+    fig, ax = plt.subplots(figsize=figsize)
+
+    h = ax.pcolormesh(per_edges, vel_edges, Z, shading="auto", cmap=cmap, vmin=0, vmax=1)
+
+    # overlay observed / true curve
+    if gv_true is not None:
+        gv_true = np.asarray(gv_true, dtype=float)
+        if gv_true.shape != periods.shape:
+            raise ValueError("gv_true must have the same shape as periods.")
+        ax.plot(periods, gv_true, "w.-", linewidth=1.5, markersize=6, label="Observed")
+        ax.legend()
+
+    ax.set_xlabel("Period (s)")
+    ax.set_ylabel("Group velocity (km/s)")
+    ax.set_title("Posterior distribution of group velocity")
+
+    if show_colorbar:
+        cbar = plt.colorbar(h, ax=ax)
+        cbar.set_label("Normalized posterior density")
 
     plt.tight_layout()
     plt.show()

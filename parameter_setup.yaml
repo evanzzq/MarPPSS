@@ -1,7 +1,7 @@
 common:
 
-  basedir: "/Users/evanzhang/zzq@umd.edu - Google Drive/My Drive/Research"
-  # basedir: "H:/My Drive/Research"
+  # basedir: "/Users/evanzhang/zzq@umd.edu - Google Drive/My Drive/Research"
+  basedir: "H:/My Drive/Research"
 
   datadir_subpaths:
     - "SharpSSPy"
@@ -62,9 +62,10 @@ experiments:
 
   - evname: "S0976asdr_1877" # name of event in raw data dir
     dtype: "DISP"
-    src_sigma: 3.0
+    src_sigma: 3.5
+    fitTT: true
     fitgv: true
-    fitLoge: true
+    fitLoge: false
     fitrho: true
     fitRange: [0,30,0,40]
     vRange: [3.0, 8.0]
@@ -75,8 +76,8 @@ experiments:
     burnInSteps: 1600000
     nSaveModels: 200
     actionsPerStep: 1
-    num_chains: 8
+    num_chains: 48
 
     mode: 1                    # 1=PP, 2=SS, 3=joint
     maxN: 50
-    runname: "run2_8c_maxN50_joint_gv_log_3_40"
+    runname: "run4_48c_N3_joint_PPTT_gv"

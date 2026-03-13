@@ -221,3 +221,71 @@ def create_D_from_model(P: np.ndarray, model: Model, prior: Prior, bookkeeping: 
         D_SS += P_SS
 
         return D_PP, D_SS
+
+import numpy as np
+
+def create_arrivals_from_model(model: Model, bookkeeping: Bookkeeping):
+    """
+    Compute predicted arrival times only.
+
+    Returns
+    -------
+    If bookkeeping.mode == 1 (PP):
+        arr_PP : np.ndarray
+    If bookkeeping.mode == 2 (SS):
+        arr_SS : np.ndarray
+    If bookkeeping.mode == 3 (joint):
+        arr_PP, arr_SS : tuple of np.ndarray
+
+    Notes
+    -----
+    - No amplitude calculation is done.
+    - For mode 1/2, model.v is interpreted the same way as in create_D_from_model:
+        mode 1: model.v = Vp
+        mode 2: model.v = Vs
+    - For mode 3:
+        model.v   = Vs
+        model.rho = Vp/Vs
+    """
+
+    if model.Nlayer < 1:
+        raise ValueError("Model must have at least 1 layer.")
+
+    # layer thicknesses above each discontinuity
+    H = np.diff(np.insert(model.H, 0, 0)).astype(float)
+
+    if bookkeeping.mode == 1:  # PP only
+        vp = np.asarray(model.v[:-1], dtype=float)
+        rayp = bookkeeping.rayp
+
+        tau_PP = 2.0 * H * np.sqrt(1.0 / (vp**2) - rayp**2)
+        arr_PP = np.cumsum(tau_PP)
+
+        return arr_PP
+
+    elif bookkeeping.mode == 2:  # SS only
+        vs = np.asarray(model.v[:-1], dtype=float)
+        rayp = bookkeeping.rayp
+
+        tau_SS = 2.0 * H * np.sqrt(1.0 / (vs**2) - rayp**2)
+        arr_SS = np.cumsum(tau_SS)
+
+        return arr_SS
+
+    elif bookkeeping.mode == 3:  # joint PP + SS
+        vs = np.asarray(model.v[:-1], dtype=float)
+        vp = np.asarray(model.v[:-1] * model.rho[:-1], dtype=float)
+
+        rayp_PP = bookkeeping.rayp[0]
+        rayp_SS = bookkeeping.rayp[1]
+
+        tau_PP = 2.0 * H * np.sqrt(1.0 / (vp**2) - rayp_PP**2)
+        tau_SS = 2.0 * H * np.sqrt(1.0 / (vs**2) - rayp_SS**2)
+
+        arr_PP = np.cumsum(tau_PP)
+        arr_SS = np.cumsum(tau_SS)
+
+        return arr_PP, arr_SS
+
+    else:
+        raise ValueError("bookkeeping.mode must be 1 (PP), 2 (SS), or 3 (joint).")

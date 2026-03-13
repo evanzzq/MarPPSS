@@ -2,7 +2,7 @@ import copy, time, os, datetime
 import numpy as np
 import matplotlib.pyplot as plt
 from marppss.model import Model
-from marppss.forward import create_D_from_model
+from marppss.forward import create_D_from_model, create_arrivals_from_model
 from marppss.util import check_model
 
 def calc_like_prob(P, D, model, prior, bookkeeping, CDinv=None):
@@ -120,34 +120,177 @@ def calc_like_prob_joint(P_PP, P_SS, D_PP, D_SS,
     logL = logL_PP + logL_SS
     return logL, logL_PP, logL_SS
 
+def calc_like_prob_travel_time(model, bookkeeping):
+    import numpy as np
+
+    # -----------------------------
+    # hard-coded observed travel times
+    # edit based on real data
+    # -----------------------------
+    arr_PP_obs = np.array([5.31, 10.93, 17.34])
+    arr_SS_obs = np.array([18.0, 40.0, 63.0]) # NOT EDITTED!!!
+
+    arr_PP_unc = np.repeat(0.1, len(arr_PP_obs))
+    arr_SS_unc = np.repeat(0.1, len(arr_SS_obs))
+
+    # -----------------------------
+    # compute model travel times
+    # -----------------------------
+    if bookkeeping.mode == 1:
+        arr_PP_model = create_arrivals_from_model(model, bookkeeping)
+
+        diff_PP = arr_PP_model - arr_PP_obs
+
+        logL_PP = -0.5 * np.sum((diff_PP / arr_PP_unc) ** 2)
+        return logL_PP
+
+    elif bookkeeping.mode == 2:
+        arr_SS_model = create_arrivals_from_model(model, bookkeeping)
+
+        diff_SS = arr_SS_model - arr_SS_obs
+
+        logL_SS = -0.5 * np.sum((diff_SS / arr_SS_unc) ** 2)
+        return logL_SS
+
+    elif bookkeeping.mode == 3:
+        arr_PP_model, arr_SS_model = create_arrivals_from_model(model, bookkeeping)
+
+        diff_PP = arr_PP_model - arr_PP_obs
+        diff_SS = arr_SS_model - arr_SS_obs
+
+        logL_PP = -0.5 * np.sum((diff_PP / arr_PP_unc) ** 2)
+        logL_SS = -0.5 * np.sum((diff_SS / arr_SS_unc) ** 2)
+
+        return logL_PP + logL_SS
+
+# def calc_like_prob_gv(model, bookkeeping): # pysurf96 version
+#     import numpy as np
+#     from pysurf96 import surf96
+#     from pysurf96.wrapper import Surf96Error
+
+#     BAD = -1e100
+
+#     # reflectivity synthetics
+#     # linear periods
+#     # periods = np.linspace(5.0, 40.0, 36)
+#     # gv_obs = np.array([
+#     #     1.69656754, 1.66145027, # 1 - 4 s: 1.72839653, 1.72837877, 1.72668886, 1.71786654,
+#     #     1.61350799, 1.55622542, 1.49543488, 1.43975198, 1.40036607, 1.38716733,
+#     #     1.40364349, 1.44419086, 1.49859321, 1.5582273 , 1.61862147, 1.67796528,
+#     #     1.73590863, 1.79222584, 1.84663725, 1.89899302, 1.94907331, 1.99699152,
+#     #     2.04305935, 2.08771873, 2.13145232, 2.17471385, 2.21789861, 2.26130128,
+#     #     2.30510902, 2.34945178, 2.39400196, 2.43886352, 2.48355818, 2.52794838,
+#     #     2.57183361, 2.61504436, 2.65710568, 2.69810677
+#     # ])
+#     # gv_unc = np.repeat(0.001, 36)
+
+#     # log periods
+#     periods = np.geomspace(3.0, 40.0, 20)
+#     gv_obs = np.array([1.72672892, 1.72407758, 1.71869135, 1.70853543, 1.69143176, 1.66428125,
+#         1.62407768, 1.56874883, 1.49969077, 1.42871773, 1.38781106, 1.4191376,
+#         1.5223254,  1.65749979, 1.80499125, 1.95818055, 2.11287093, 2.28114462,
+#         2.47920442, 2.69810677])
+#     gv_unc = np.repeat(0.001, 20)
+
+#     if bookkeeping.fitrho or bookkeeping.mode == 3:
+#         vpvsr = np.asarray(model.rho, dtype=float)
+#     else:
+#         vpvsr = 1.8
+
+#     # convert interface depths to layer thicknesses
+#     H_interfaces = np.asarray(model.H, dtype=float)
+#     if H_interfaces.size == 0:
+#         H = np.array([0.0])
+#         thickness = np.array([])
+#     else:
+#         thickness = np.diff(np.r_[0.0, H_interfaces])
+#         H = np.r_[thickness, 0.0]
+
+#     # build model
+#     if bookkeeping.mode == 1:
+#         vp = np.asarray(model.v, dtype=float)
+#         vs = vp / vpvsr
+#     elif bookkeeping.mode == 2:
+#         vs = np.asarray(model.v, dtype=float)
+#         vp = vs * vpvsr
+#     elif bookkeeping.mode == 3:
+#         vs = np.asarray(model.v, dtype=float)
+#         vp = vs * vpvsr
+#     else:
+#         return BAD
+
+#     rho = 0.8 * vs
+
+#     # ---------- pre-checks ----------
+#     # finite and positive
+#     if np.any(~np.isfinite(vp)) or np.any(~np.isfinite(vs)) or np.any(~np.isfinite(rho)):
+#         return BAD
+#     if np.any(vp <= 0) or np.any(vs <= 0) or np.any(rho <= 0):
+#         return BAD
+
+#     # positive vp/vs
+#     if np.any(np.asarray(vpvsr) <= 0):
+#         return BAD
+
+#     # thickness must be positive, and not too tiny
+#     if thickness.size > 0:
+#         if np.any(thickness <= 0):
+#             return BAD
+#         if np.any(thickness < 0.05):   # adjust threshold as needed
+#             return BAD
+
+#     # actual Vs monotonicity is what matters
+#     if np.any(np.diff(vs) <= 0):
+#         return BAD
+
+#     # optional: also require Vp monotonicity
+#     if np.any(np.diff(vp) <= 0):
+#         return BAD
+
+#     # ---------- surf96 call ----------
+#     try:
+#         gv_model = surf96(
+#             H,
+#             vp,
+#             vs,
+#             rho,
+#             periods,
+#             wave="rayleigh",
+#             mode=1,
+#             velocity="group",
+#             flat_earth=True
+#         )
+#     except Surf96Error:
+#         return BAD
+#     except Exception:
+#         return BAD
+
+#     # check output
+#     if np.any(~np.isfinite(gv_model)):
+#         return BAD
+
+#     diff_gv = gv_model - gv_obs
+#     gv_unc = gv_unc * np.exp(0.5 * model.loge_gv)
+#     logL_gv = -0.5 * np.sum((diff_gv / gv_unc) ** 2)
+
+#     return logL_gv
+
 def calc_like_prob_gv(model, bookkeeping):
     import numpy as np
-    from pysurf96 import surf96
-    from pysurf96.wrapper import Surf96Error
+    from disba import GroupDispersion
 
     BAD = -1e100
 
-    # reflectivity synthetics
-    # linear periods
-    # periods = np.linspace(5.0, 40.0, 36)
-    # gv_obs = np.array([
-    #     1.69656754, 1.66145027, # 1 - 4 s: 1.72839653, 1.72837877, 1.72668886, 1.71786654,
-    #     1.61350799, 1.55622542, 1.49543488, 1.43975198, 1.40036607, 1.38716733,
-    #     1.40364349, 1.44419086, 1.49859321, 1.5582273 , 1.61862147, 1.67796528,
-    #     1.73590863, 1.79222584, 1.84663725, 1.89899302, 1.94907331, 1.99699152,
-    #     2.04305935, 2.08771873, 2.13145232, 2.17471385, 2.21789861, 2.26130128,
-    #     2.30510902, 2.34945178, 2.39400196, 2.43886352, 2.48355818, 2.52794838,
-    #     2.57183361, 2.61504436, 2.65710568, 2.69810677
-    # ])
-    # gv_unc = np.repeat(0.001, 36)
-
     # log periods
-    periods = np.geomspace(3.0, 40.0, 20)
-    gv_obs = np.array([1.72672892, 1.72407758, 1.71869135, 1.70853543, 1.69143176, 1.66428125,
-        1.62407768, 1.56874883, 1.49969077, 1.42871773, 1.38781106, 1.4191376,
-        1.5223254,  1.65749979, 1.80499125, 1.95818055, 2.11287093, 2.28114462,
-        2.47920442, 2.69810677])
-    gv_unc = np.repeat(0.001, 20)
+    periods = np.geomspace(1.0, 40.0, 30)
+    gv_obs = np.array([
+        1.7283139, 1.72831515, 1.72831393, 1.72831515, 1.72831393, 1.72826754,
+        1.7282236,  1.72805153, 1.7274429,  1.72600227, 1.72294824, 1.71701786,
+        1.70661801, 1.68973353, 1.66400285, 1.62690315, 1.57666305, 1.51391183,
+        1.4462376,  1.39545547, 1.39696771, 1.46827693, 1.58370326, 1.71566555,
+        1.85606703, 1.9992589,  2.14497363, 2.30599601, 2.4935115,  2.69799281
+    ])
+    gv_unc = np.repeat(0.002, 30)
 
     if bookkeeping.fitrho or bookkeeping.mode == 3:
         vpvsr = np.asarray(model.rho, dtype=float)
@@ -156,6 +299,7 @@ def calc_like_prob_gv(model, bookkeeping):
 
     # convert interface depths to layer thicknesses
     H_interfaces = np.asarray(model.H, dtype=float)
+
     if H_interfaces.size == 0:
         H = np.array([0.0])
         thickness = np.array([])
@@ -179,55 +323,39 @@ def calc_like_prob_gv(model, bookkeeping):
     rho = 0.8 * vs
 
     # ---------- pre-checks ----------
-    # finite and positive
     if np.any(~np.isfinite(vp)) or np.any(~np.isfinite(vs)) or np.any(~np.isfinite(rho)):
         return BAD
     if np.any(vp <= 0) or np.any(vs <= 0) or np.any(rho <= 0):
         return BAD
 
-    # positive vp/vs
     if np.any(np.asarray(vpvsr) <= 0):
         return BAD
 
-    # thickness must be positive, and not too tiny
     if thickness.size > 0:
         if np.any(thickness <= 0):
             return BAD
-        if np.any(thickness < 0.05):   # adjust threshold as needed
+        if np.any(thickness < 0.05):
             return BAD
 
-    # actual Vs monotonicity is what matters
     if np.any(np.diff(vs) <= 0):
         return BAD
 
-    # optional: also require Vp monotonicity
     if np.any(np.diff(vp) <= 0):
         return BAD
 
-    # ---------- surf96 call ----------
+    # ---------- disba call ----------
     try:
-        gv_model = surf96(
-            H,
-            vp,
-            vs,
-            rho,
-            periods,
-            wave="rayleigh",
-            mode=1,
-            velocity="group",
-            flat_earth=True
-        )
-    except Surf96Error:
-        return BAD
+        disp = GroupDispersion(H, vp, vs, rho)
+        gv_model = disp(periods, mode=0, wave="rayleigh").velocity
     except Exception:
         return BAD
 
-    # check output
     if np.any(~np.isfinite(gv_model)):
         return BAD
 
     diff_gv = gv_model - gv_obs
     gv_unc = gv_unc * np.exp(0.5 * model.loge_gv)
+
     logL_gv = -0.5 * np.sum((diff_gv / gv_unc) ** 2)
 
     return logL_gv
@@ -551,7 +679,10 @@ def rjmcmc_run(P, D, prior, bookkeeping, saveDir, CDinv=None):
     actionsPerStep = bookkeeping.actionsPerStep
 
     # Start from an empty model
-    model = Model.create_initial(prior=prior)
+    if not bookkeeping.fitTT: 
+        model = Model.create_initial(prior=prior)
+    else:
+        model = Model.create_initial(prior=prior, Nlayer=3) # HARD CODED!!!
 
     # Initial likelihood
     logL_trace = []
@@ -601,13 +732,15 @@ def rjmcmc_run(P, D, prior, bookkeeping, saveDir, CDinv=None):
     ensemble = []
 
     # Action pool
-    actionPool = [2,3,9] # H, w, v
-    if prior.maxN > 1: actionPool = np.append(actionPool, [0,1]) # birth, death
-    if bookkeeping.mode == 3: actionPool = np.append(actionPool, [4]) # w2
-    if bookkeeping.mode == 3 or (bookkeeping.fitgv and bookkeeping.fitrho): actionPool = np.append(actionPool, [10]) # rho
-    if bookkeeping.fitLoge:
-        if bookkeeping.mode in [1, 2]: actionPool = np.append(actionPool, [5]) # loge
-        if bookkeeping.mode == 3: actionPool = np.append(actionPool, [5,6]) # loge and loge2
+    actionPool = [2,9] # H, v
+    if not bookkeeping.fitTT: # fit full waveform
+        actionPool = np.append(actionPool, [3]) # w
+        if bookkeeping.mode == 3: actionPool = np.append(actionPool, [4]) # w2
+        if bookkeeping.fitLoge:
+            if bookkeeping.mode in [1, 2]: actionPool = np.append(actionPool, [5]) # loge
+            if bookkeeping.mode == 3: actionPool = np.append(actionPool, [5,6]) # loge and loge2
+        if prior.maxN > 1: actionPool = np.append(actionPool, [0,1]) # birth, death
+    if bookkeeping.mode == 3 or ((bookkeeping.fitgv or bookkeeping.fitavgvs) and bookkeeping.fitrho): actionPool = np.append(actionPool, [10]) # rho
     # if bookkeeping.fitgv: actionPool = np.append(actionPool, [7]) # loge_gv # commented out so loge_gv === 0
     # if bookkeeping.fitavgvs: actionPool = np.append(actionPool, [8])
 
@@ -641,12 +774,18 @@ def rjmcmc_run(P, D, prior, bookkeeping, saveDir, CDinv=None):
                 model_new, _ = update_rho(model_new, prior, bookkeeping.rayp)
 
         # Compute likelihood
-        if bookkeeping.mode in (1, 2):
-            new_logL = calc_like_prob(P, D, model_new, prior, bookkeeping, CDinv=CDinv)
-        elif bookkeeping.mode == 3:
-            new_logL, new_logL_PP, new_logL_SS = calc_like_prob_joint(
-                P_PP, P_SS, D_PP, D_SS, 
-                model_new, prior, bookkeeping, CDinv_PP=CDinv_PP, CDinv_SS=CDinv_SS)      
+        # CASE 1: FIT FULL WAVEFORM
+        if not bookkeeping.fitTT:
+            if bookkeeping.mode in (1, 2):
+                new_logL = calc_like_prob(P, D, model_new, prior, bookkeeping, CDinv=CDinv)
+            elif bookkeeping.mode == 3:
+                new_logL, new_logL_PP, new_logL_SS = calc_like_prob_joint(
+                    P_PP, P_SS, D_PP, D_SS, 
+                    model_new, prior, bookkeeping, CDinv_PP=CDinv_PP, CDinv_SS=CDinv_SS)
+        # CASE 2: FIT ONLY TRAVEL TIME
+        else:
+            new_logL = calc_like_prob_travel_time(model_new, bookkeeping)
+        # Then add fitgv and fitavgvs as needed
         if bookkeeping.fitgv: 
             new_logL_gv = calc_like_prob_gv(model_new, bookkeeping)
             new_logL += new_logL_gv

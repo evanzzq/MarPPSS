@@ -182,6 +182,7 @@ def prepare_experiment(exp_vars):
         rayp=exp_vars["rayp"],
         fitRange=exp_vars["fitRange"],
         fitLoge=exp_vars["fitLoge"],
+        fitTT=exp_vars["fitTT"],
         fitgv=exp_vars["fitgv"],
         fitrho=exp_vars["fitrho"],
         totalSteps=exp_vars["totalSteps"],

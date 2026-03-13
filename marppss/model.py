@@ -6,6 +6,7 @@ class Bookkeeping:
     mode:           int # 1 - PP, 2 - SS, 3 - joint
     rayp:           np.ndarray # mode 1/2: [rayp]; mode 3: [rayp_PP, rayp_SS]
     fitRange:       np.ndarray = None # mode 1/2: [tmin, tmax]; mode 3: [tmin_PP, tmax_PP, tmin_SS, tmax_SS]
+    fitTT:          bool = False # fit travel time instead of full waveform
     fitLoge:        bool = True
     fitgv:          bool = False
     fitavgvs:       bool = False
@@ -64,21 +65,29 @@ class Model:
     rho: np.ndarray # len(rho) = len(v) = len(H) + 1
 
     @classmethod
-    def create_initial(cls, prior: Prior):
-        # for an initial model, it's one layer crust and half space with v and rho taken from prior
+    def create_initial(cls, prior: Prior, Nlayer: int = 1):
+
+        # generate sorted interface depths
+        H = np.sort(np.random.uniform(prior.HRange[0], prior.HRange[1], Nlayer))
+
+        # velocities must increase with depth
+        v = np.sort(np.random.uniform(prior.vRange[0], prior.vRange[1], Nlayer + 1))
+
+        # vp/vs ratios
+        rho = np.random.uniform(prior.rhoRange[0], prior.rhoRange[1], Nlayer + 1)
+
         return cls(
-            Nlayer=1,
-            H=np.random.uniform(prior.HRange[0], prior.HRange[1], 1),
-            w=np.ones(1),
-            w2=np.ones(1),
+            Nlayer=Nlayer,
+            H=H,
+            w=np.ones(Nlayer),
+            w2=np.ones(Nlayer),
             loge=0.,
             loge2=0.,
             loge_gv=0.,
             loge_avg_vs=0.,
-            v = np.sort(np.random.uniform(prior.vRange[0], prior.vRange[1], 2)),
-            rho=np.random.uniform(prior.rhoRange[0], prior.rhoRange[1], 2) # rho will be ignore in mode 1/2
+            v=v,
+            rho=rho
         )
-    
     # @classmethod
     # def create_random(cls, prior:Prior):
     #     pass
