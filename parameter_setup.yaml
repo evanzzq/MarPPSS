@@ -63,19 +63,20 @@ experiments:
   - evname: "S0976asdr_1877" # name of event in raw data dir
     dtype: "DISP"
     src_sigma: 3.0
-    useCD: false
-    fitavgvs: true
-    fitgv: false
+    fitgv: true
     fitLoge: true
     fitrho: true
     fitRange: [0,30,0,40]
+    vRange: [3.0, 8.0]
 
-    totalSteps: 100000
-    burnInSteps: 80000
+    rayp: 0.0862
+
+    totalSteps: 2000000
+    burnInSteps: 1600000
     nSaveModels: 200
     actionsPerStep: 1
-    num_chains: 2
+    num_chains: 8
 
-    mode: 3                    # 1=PP, 2=SS, 3=joint
+    mode: 1                    # 1=PP, 2=SS, 3=joint
     maxN: 50
-    runname: "run1_2c_maxN50_joint_avgvs_loge"
+    runname: "run2_8c_maxN50_joint_gv_log_3_40"

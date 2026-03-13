@@ -9,8 +9,8 @@ from marppss.visualization import plot_velocity_ensemble, plot_posterior_num_pha
 filedir = "/Users/evanzhang/zzq@umd.edu - Google Drive/My Drive/Research/MarPPSS"
 
 # ---- User-defined experiment/run ----
-expname = "S0976asdr_1877_src_3.0_s_joint"   # folder under run/
-runname = "run1_2c_maxN50_joint_avgvs_loge"                     # subfolder under that
+expname = "S0976asdr_1877_src_3.0_s_PP"   # folder under run/
+runname = "run2_8c_maxN50_joint_gv_log_3_40"                     # subfolder under that
 
 # ---- Explicit data dirs (user-specified) ----
 PPdir = "S0976asdr_1877_src_3.0_s_PP"        # folder under data/
@@ -164,16 +164,29 @@ else:
 #                       PLOT RESULTS
 # -----------------------------------------------------------
 
-plot_velocity_ensemble(ensemble_all, bookkeeping, prior.HRange)
+plot_velocity_ensemble(ensemble_all, bookkeeping, prior.HRange, 
+                       H_true=np.array([10, 24, 48]), v_true=np.array([3.8, 4.5, 6.22, 7.67]), rho_true=np.array([2.054, 1.607, 1.659, 1.771]))
 plot_velocity_density_image(ensemble_all, bookkeeping, prior.HRange, nz=200, nv=200, smooth_sigma=2.0)
 
 plot_predicted_vs_input(ensemble_all, P, D, prior, bookkeeping)
 plot_posterior_error_params(ensemble_all, bookkeeping)
 plot_posterior_num_phases(ensemble_all)
 
-# Group-velocity posteriors (using your S1000a values)
-periods = np.array([18.9, 28.86])
-gv_obs  = np.array([2.726, 2.829])
+# # Group-velocity posteriors (using your S1000a values)
+# periods = np.array([18.9, 28.86])
+# gv_obs  = np.array([2.726, 2.829])
+
+# reflectivity synthetics
+periods = np.linspace(1.0, 40.0, 40)
+gv_obs = np.array([
+    1.72839653, 1.72837877, 1.72668886, 1.71786654, 1.69656754, 1.66145027,
+    1.61350799, 1.55622542, 1.49543488, 1.43975198, 1.40036607, 1.38716733,
+    1.40364349, 1.44419086, 1.49859321, 1.5582273 , 1.61862147, 1.67796528,
+    1.73590863, 1.79222584, 1.84663725, 1.89899302, 1.94907331, 1.99699152,
+    2.04305935, 2.08771873, 2.13145232, 2.17471385, 2.21789861, 2.26130128,
+    2.30510902, 2.34945178, 2.39400196, 2.43886352, 2.48355818, 2.52794838,
+    2.57183361, 2.61504436, 2.65710568, 2.69810677
+])
 
 if bookkeeping.fitgv:
     plot_posterior_group_velocities(

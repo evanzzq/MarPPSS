@@ -74,7 +74,7 @@ class Model:
             loge=0.,
             loge2=0.,
             loge_gv=0.,
-            loge_avg_vs = 0.,
+            loge_avg_vs=0.,
             v = np.sort(np.random.uniform(prior.vRange[0], prior.vRange[1], 2)),
             rho=np.random.uniform(prior.rhoRange[0], prior.rhoRange[1], 2) # rho will be ignore in mode 1/2
         )

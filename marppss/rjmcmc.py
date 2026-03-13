@@ -121,49 +121,115 @@ def calc_like_prob_joint(P_PP, P_SS, D_PP, D_SS,
     return logL, logL_PP, logL_SS
 
 def calc_like_prob_gv(model, bookkeeping):
-
+    import numpy as np
     from pysurf96 import surf96
-    
-    # edit these based on data
-    periods = np.array([18.9, 28.86]) 
-    gv_obs = np.array([2.726, 2.829]) # S1000a group velocities
-    gv_unc = np.array([0.006146, 0.01261]) * 1 # S1000a gv uncertainties
-    sigma_gv = 0.01
+    from pysurf96.wrapper import Surf96Error
+
+    BAD = -1e100
+
+    # reflectivity synthetics
+    # linear periods
+    # periods = np.linspace(5.0, 40.0, 36)
+    # gv_obs = np.array([
+    #     1.69656754, 1.66145027, # 1 - 4 s: 1.72839653, 1.72837877, 1.72668886, 1.71786654,
+    #     1.61350799, 1.55622542, 1.49543488, 1.43975198, 1.40036607, 1.38716733,
+    #     1.40364349, 1.44419086, 1.49859321, 1.5582273 , 1.61862147, 1.67796528,
+    #     1.73590863, 1.79222584, 1.84663725, 1.89899302, 1.94907331, 1.99699152,
+    #     2.04305935, 2.08771873, 2.13145232, 2.17471385, 2.21789861, 2.26130128,
+    #     2.30510902, 2.34945178, 2.39400196, 2.43886352, 2.48355818, 2.52794838,
+    #     2.57183361, 2.61504436, 2.65710568, 2.69810677
+    # ])
+    # gv_unc = np.repeat(0.001, 36)
+
+    # log periods
+    periods = np.geomspace(3.0, 40.0, 20)
+    gv_obs = np.array([1.72672892, 1.72407758, 1.71869135, 1.70853543, 1.69143176, 1.66428125,
+        1.62407768, 1.56874883, 1.49969077, 1.42871773, 1.38781106, 1.4191376,
+        1.5223254,  1.65749979, 1.80499125, 1.95818055, 2.11287093, 2.28114462,
+        2.47920442, 2.69810677])
+    gv_unc = np.repeat(0.001, 20)
 
     if bookkeeping.fitrho or bookkeeping.mode == 3:
-        vpvsr = model.rho
+        vpvsr = np.asarray(model.rho, dtype=float)
     else:
         vpvsr = 1.8
 
-    # define model for pysurf96 input
-    H = np.append(model.H, 0)
-    if bookkeeping.mode == 1: 
-        vp = model.v
-        vs = vp / vpvsr
-    if bookkeeping.mode == 2: 
-        vs = model.v
-        vp = vs * vpvsr
-    if bookkeeping.mode == 3:
-        vs = model.v
-        vp = model.v * vpvsr
-    rho = vs* 0.8 # density
+    # convert interface depths to layer thicknesses
+    H_interfaces = np.asarray(model.H, dtype=float)
+    if H_interfaces.size == 0:
+        H = np.array([0.0])
+        thickness = np.array([])
+    else:
+        thickness = np.diff(np.r_[0.0, H_interfaces])
+        H = np.r_[thickness, 0.0]
 
-    # call pysurf96
-    gv_model = surf96(
-        H,
-        vp,
-        vs,
-        rho,
-        periods,
-        wave="rayleigh",
-        mode=1, # 1: fundamental, 2: second-mode, etc
-        velocity="group",
-        flat_earth=True)
-    
-    diff_gv = (gv_model - gv_obs)
-    gv_unc *= np.exp(0.5 * model.loge_gv)
+    # build model
+    if bookkeeping.mode == 1:
+        vp = np.asarray(model.v, dtype=float)
+        vs = vp / vpvsr
+    elif bookkeeping.mode == 2:
+        vs = np.asarray(model.v, dtype=float)
+        vp = vs * vpvsr
+    elif bookkeeping.mode == 3:
+        vs = np.asarray(model.v, dtype=float)
+        vp = vs * vpvsr
+    else:
+        return BAD
+
+    rho = 0.8 * vs
+
+    # ---------- pre-checks ----------
+    # finite and positive
+    if np.any(~np.isfinite(vp)) or np.any(~np.isfinite(vs)) or np.any(~np.isfinite(rho)):
+        return BAD
+    if np.any(vp <= 0) or np.any(vs <= 0) or np.any(rho <= 0):
+        return BAD
+
+    # positive vp/vs
+    if np.any(np.asarray(vpvsr) <= 0):
+        return BAD
+
+    # thickness must be positive, and not too tiny
+    if thickness.size > 0:
+        if np.any(thickness <= 0):
+            return BAD
+        if np.any(thickness < 0.05):   # adjust threshold as needed
+            return BAD
+
+    # actual Vs monotonicity is what matters
+    if np.any(np.diff(vs) <= 0):
+        return BAD
+
+    # optional: also require Vp monotonicity
+    if np.any(np.diff(vp) <= 0):
+        return BAD
+
+    # ---------- surf96 call ----------
+    try:
+        gv_model = surf96(
+            H,
+            vp,
+            vs,
+            rho,
+            periods,
+            wave="rayleigh",
+            mode=1,
+            velocity="group",
+            flat_earth=True
+        )
+    except Surf96Error:
+        return BAD
+    except Exception:
+        return BAD
+
+    # check output
+    if np.any(~np.isfinite(gv_model)):
+        return BAD
+
+    diff_gv = gv_model - gv_obs
+    gv_unc = gv_unc * np.exp(0.5 * model.loge_gv)
     logL_gv = -0.5 * np.sum((diff_gv / gv_unc) ** 2)
-    
+
     return logL_gv
 
 def calc_like_prob_avg_vs(model, bookkeeping):
