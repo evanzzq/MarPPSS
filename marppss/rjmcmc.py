@@ -290,7 +290,7 @@ def calc_like_prob_gv(model, bookkeeping):
         1.32367671, 1.47286633, 1.68751274, 1.91983462, 2.14522436, 2.3505885,
         2.55207088, 2.76058425, 2.96288609, 3.13954886, 3.2822797,  3.39365548
     ])
-    gv_unc = np.repeat(0.02, 30)
+    gv_unc = np.repeat(0.1, 30)
 
     if bookkeeping.fitrho or bookkeeping.mode == 3:
         vpvsr = np.asarray(model.rho, dtype=float)
@@ -686,45 +686,35 @@ def rjmcmc_run(P, D, prior, bookkeeping, saveDir, CDinv=None):
 
     # Initial likelihood
     logL_trace = []
-    if bookkeeping.mode in (1, 2):
-        logL = calc_like_prob(P, D, model, prior, bookkeeping, CDinv=CDinv)
-        # fitgv and fitavgvs - only max 1 should be turned on
-        if bookkeeping.fitgv: 
-            logL_gv_trace = []
-            logL_wf_trace = []
-            logL_wf_trace.append(logL)
-            logL_gv = calc_like_prob_gv(model, bookkeeping)
-            logL_gv_trace.append(logL_gv)
-            logL += logL_gv
-        if bookkeeping.fitavgvs:
-            logL_avg_vs_trace = []
-            logL_avg_vs = calc_like_prob_avg_vs(model, bookkeeping)
-            logL_avg_vs_trace.append(logL_avg_vs)
-            logL += logL_avg_vs
-        logL_trace.append(logL)
-    elif bookkeeping.mode == 3:
-        logL_PP_trace, logL_SS_trace = [], []
-        logL, logL_PP, logL_SS = calc_like_prob_joint(
-            P_PP, P_SS, D_PP, D_SS, 
-            model, prior, bookkeeping, CDinv_PP=CDinv_PP, CDinv_SS=CDinv_SS)
-        # fitgv and fitavgvs - only max 1 should be turned on
-        if bookkeeping.fitgv: 
-            logL_gv_trace = []
-            logL_wf_trace = []
-            logL_wf_trace.append(logL)
-            logL_gv = calc_like_prob_gv(model, bookkeeping)
-            logL_gv_trace.append(logL_gv)
-            logL += logL_gv
-        if bookkeeping.fitavgvs:
-            logL_avg_vs_trace = []
-            logL_wf_trace = []
-            logL_wf_trace.append(logL)
-            logL_avg_vs = calc_like_prob_avg_vs(model, bookkeeping)
-            logL_avg_vs_trace.append(logL_avg_vs)
-            logL += logL_avg_vs
-        logL_trace.append(logL)
-        logL_PP_trace.append(logL_PP)
-        logL_SS_trace.append(logL_SS)
+
+    if not bookkeeping.fitTT:
+        if bookkeeping.mode in (1, 2):
+            logL = calc_like_prob(P, D, model, prior, bookkeeping, CDinv=CDinv)
+        elif bookkeeping.mode == 3:
+            logL_PP_trace, logL_SS_trace = [], []
+            logL, logL_PP, logL_SS = calc_like_prob_joint(
+                P_PP, P_SS, D_PP, D_SS, 
+                model, prior, bookkeeping, CDinv_PP=CDinv_PP, CDinv_SS=CDinv_SS)
+            logL_PP_trace.append(logL_PP)
+            logL_SS_trace.append(logL_SS)
+    else:
+        logL = calc_like_prob_travel_time(model, bookkeeping)
+
+    # fitgv and fitavgvs - only max 1 should be turned on
+    if bookkeeping.fitgv: 
+        logL_gv_trace = []
+        logL_wf_trace = []
+        logL_wf_trace.append(logL)
+        logL_gv = calc_like_prob_gv(model, bookkeeping)
+        logL_gv_trace.append(logL_gv)
+        logL += logL_gv
+    if bookkeeping.fitavgvs:
+        logL_avg_vs_trace = []
+        logL_avg_vs = calc_like_prob_avg_vs(model, bookkeeping)
+        logL_avg_vs_trace.append(logL_avg_vs)
+        logL += logL_avg_vs
+    
+    logL_trace.append(logL)
 
     start_time = time.time()
     checkpoint_interval = totalSteps // 100
@@ -741,7 +731,7 @@ def rjmcmc_run(P, D, prior, bookkeeping, saveDir, CDinv=None):
             if bookkeeping.mode == 3: actionPool = np.append(actionPool, [5,6]) # loge and loge2
         if prior.maxN > 1: actionPool = np.append(actionPool, [0,1]) # birth, death
     if bookkeeping.mode == 3 or ((bookkeeping.fitgv or bookkeeping.fitavgvs) and bookkeeping.fitrho): actionPool = np.append(actionPool, [10]) # rho
-    if bookkeeping.fitgv: actionPool = np.append(actionPool, [7]) # loge_gv # commented out so loge_gv === 0
+    # if bookkeeping.fitgv: actionPool = np.append(actionPool, [7]) # loge_gv # commented out so loge_gv === 0
     # if bookkeeping.fitavgvs: actionPool = np.append(actionPool, [8])
 
     for iStep in range(totalSteps):

@@ -80,4 +80,4 @@ experiments:
 
     mode: 1                   # 1=PP, 2=SS, 3=joint
     maxN: 50
-    runname: "run6_8c_N50_joint_PPTT_gv_geom_1_60_30_unc_0.02_loge"
+    runname: "run6_8c_N50_joint_PPTT_gv_geom_1_60_30_unc_0.1"
