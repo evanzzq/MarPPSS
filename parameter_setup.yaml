@@ -63,7 +63,7 @@ experiments:
   - evname: "S0976asdr_1877" # name of event in raw data dir
     dtype: "DISP"
     src_sigma: 3.5
-    fitTT: true
+    fitTT: false
     fitgv: true
     fitLoge: false
     fitrho: true
@@ -72,12 +72,12 @@ experiments:
 
     rayp: 0.0862
 
-    totalSteps: 2000000
-    burnInSteps: 1600000
+    totalSteps: 1000000
+    burnInSteps: 600000
     nSaveModels: 200
     actionsPerStep: 1
-    num_chains: 48
+    num_chains: 8
 
-    mode: 1                    # 1=PP, 2=SS, 3=joint
+    mode: 1                   # 1=PP, 2=SS, 3=joint
     maxN: 50
-    runname: "run4_48c_N3_joint_PPTT_gv"
+    runname: "run6_8c_N50_joint_PPTT_gv_geom_1_60_30_unc_0.02_loge"

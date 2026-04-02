@@ -187,7 +187,7 @@ def plot_velocity_ensemble(models,
 
             vx_vp_true, z_vp_true = _model_to_step_profile(H_true, vp_true, HRange)
             ax.plot(vx_vp_true, z_vp_true,
-                    color="darkorange", label="Vp true", **true_kwargs)
+                    color="r", label="Vp true", **true_kwargs)
 
         ax.set_title("Velocity ensemble (Vp & Vs)")
         ax.legend(loc="lower right")

@@ -282,15 +282,15 @@ def calc_like_prob_gv(model, bookkeeping):
     BAD = -1e100
 
     # log periods
-    periods = np.geomspace(1.0, 40.0, 30)
+    periods = np.geomspace(1.0, 60.0, 30)
     gv_obs = np.array([
-        1.7283139, 1.72831515, 1.72831393, 1.72831515, 1.72831393, 1.72826754,
-        1.7282236,  1.72805153, 1.7274429,  1.72600227, 1.72294824, 1.71701786,
-        1.70661801, 1.68973353, 1.66400285, 1.62690315, 1.57666305, 1.51391183,
-        1.4462376,  1.39545547, 1.39696771, 1.46827693, 1.58370326, 1.71566555,
-        1.85606703, 1.9992589,  2.14497363, 2.30599601, 2.4935115,  2.69799281
+        1.72831393, 1.72831515, 1.72831393, 1.72831515, 1.72826632, 1.72826998,
+        1.72809057, 1.72757214, 1.72604118, 1.72239639, 1.71488613, 1.70093261,
+        1.67697467, 1.63877135, 1.58146902, 1.50134315, 1.40219812, 1.31540982,
+        1.32367671, 1.47286633, 1.68751274, 1.91983462, 2.14522436, 2.3505885,
+        2.55207088, 2.76058425, 2.96288609, 3.13954886, 3.2822797,  3.39365548
     ])
-    gv_unc = np.repeat(0.002, 30)
+    gv_unc = np.repeat(0.02, 30)
 
     if bookkeeping.fitrho or bookkeeping.mode == 3:
         vpvsr = np.asarray(model.rho, dtype=float)
@@ -741,7 +741,7 @@ def rjmcmc_run(P, D, prior, bookkeeping, saveDir, CDinv=None):
             if bookkeeping.mode == 3: actionPool = np.append(actionPool, [5,6]) # loge and loge2
         if prior.maxN > 1: actionPool = np.append(actionPool, [0,1]) # birth, death
     if bookkeeping.mode == 3 or ((bookkeeping.fitgv or bookkeeping.fitavgvs) and bookkeeping.fitrho): actionPool = np.append(actionPool, [10]) # rho
-    # if bookkeeping.fitgv: actionPool = np.append(actionPool, [7]) # loge_gv # commented out so loge_gv === 0
+    if bookkeeping.fitgv: actionPool = np.append(actionPool, [7]) # loge_gv # commented out so loge_gv === 0
     # if bookkeeping.fitavgvs: actionPool = np.append(actionPool, [8])
 
     for iStep in range(totalSteps):

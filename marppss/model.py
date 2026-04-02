@@ -28,7 +28,7 @@ class Prior:
     tlen: float = None # half length in seconds
     HRange: tuple = (1, 60)
     wRange: tuple = (0.5, 1.5)
-    logeRange: tuple = (0., 20.)
+    logeRange: tuple = (0., 10.)
     vRange: tuple = (1.0, 5.0) # for mode 1/2 v is vp or vs respectively; for mode 3 v is vs, and vp = v * rho
     rhoRange: tuple = (1.6, 2.0)
 
