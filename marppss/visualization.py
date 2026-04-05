@@ -479,24 +479,37 @@ def plot_posterior_error_params(ensemble, bookkeeping, bins=40, figsize=(6, 8), 
     """
 
     mode = bookkeeping.mode
-    fitgv = bookkeeping.fitgv
 
     # Decide how many panels
     n_panels = 0
     plot_loge = False
     plot_loge2 = False
     plot_loge_gv = False
+    plot_loge_avgvs = False
+    plot_loge_TT = False
+    plot_loge_TT2 = False
 
     if mode in (1, 2):
-        plot_loge = True
+        if not bookkeeping.fitTT:
+            plot_loge = True
+        else:
+            plot_loge_TT = True
         n_panels += 1
     elif mode == 3:
-        plot_loge = True
-        plot_loge2 = True
+        if not bookkeeping.fitTT:
+            plot_loge = True
+            plot_loge2 = True
+        else:
+            plot_loge_TT = True
+            plot_loge_TT2 = True
         n_panels += 2
 
-    if fitgv:
+    if bookkeeping.fitgv:
         plot_loge_gv = True
+        n_panels += 1
+    
+    if bookkeeping.fitavgvs:
+        plot_loge_avgvs = True
         n_panels += 1
 
     if n_panels == 0:
@@ -531,6 +544,30 @@ def plot_posterior_error_params(ensemble, bookkeeping, bins=40, figsize=(6, 8), 
         ax.set_xlabel(r"$\log e_{\mathrm{SS}}$")
         ax.set_ylabel("Density" if density else "Count")
         ipanel += 1
+    
+    # --- loge_TT ---
+    if plot_loge_TT:
+        values = np.array([m.loge_TT for m in ensemble])
+        ax = axes[ipanel]
+        ax.hist(values, bins=bins, density=density)
+        if mode in (1, 2):
+            ax.set_title(r"$\log e$ (travel time error)")
+            ax.set_xlabel(r"$\log e$")
+        else:
+            ax.set_title(r"$\log e_{\mathrm{PP}}$ (PP travel time error)")
+            ax.set_xlabel(r"$\log e_{\mathrm{PP}}$")
+        ax.set_ylabel("Density" if density else "Count")
+        ipanel += 1
+
+    # --- loge_TT2 (mode 3 only) ---
+    if plot_loge_TT2:
+        values = np.array([m.loge_TT2 for m in ensemble])
+        ax = axes[ipanel]
+        ax.hist(values, bins=bins, density=density)
+        ax.set_title(r"$\log e_{\mathrm{SS}}$ (SS travel time error)")
+        ax.set_xlabel(r"$\log e_{\mathrm{SS}}$")
+        ax.set_ylabel("Density" if density else "Count")
+        ipanel += 1
 
     # --- loge_gv (if fitgv) ---
     if plot_loge_gv:
@@ -549,6 +586,25 @@ def plot_posterior_error_params(ensemble, bookkeeping, bins=40, figsize=(6, 8), 
         else:
             ax = axes[ipanel]
             ax.text(0.5, 0.5, "No loge_gv attribute in models", ha="center", va="center")
+            ax.set_axis_off()
+    
+    # --- loge_avgvs (if fitgv) ---
+    if plot_loge_avgvs:
+        # Some early models may not have loge_gv; skip them safely
+        vals = []
+        for m in ensemble:
+            if hasattr(m, "loge_avgvs"):
+                vals.append(m.loge_avgvs)
+        if len(vals) > 0:
+            values = np.array(vals)
+            ax = axes[ipanel]
+            ax.hist(values, bins=bins, density=density)
+            ax.set_title(r"$\log e_{\mathrm{avgvs}}$ (Average vs error)")
+            ax.set_xlabel(r"$\log e_{\mathrm{avgvs}}$")
+            ax.set_ylabel("Density" if density else "Count")
+        else:
+            ax = axes[ipanel]
+            ax.text(0.5, 0.5, "No loge_avgvs attribute in models", ha="center", va="center")
             ax.set_axis_off()
 
     plt.tight_layout()

@@ -1,7 +1,7 @@
 common:
 
-  # basedir: "/Users/evanzhang/zzq@umd.edu - Google Drive/My Drive/Research"
-  basedir: "H:/My Drive/Research"
+  basedir: "/Users/evanzhang/zzq@umd.edu - Google Drive/My Drive/Research"
+  # basedir: "H:/My Drive/Research"
 
   datadir_subpaths:
     - "SharpSSPy"
@@ -63,7 +63,7 @@ experiments:
   - evname: "S0976asdr_1877" # name of event in raw data dir
     dtype: "DISP"
     src_sigma: 3.5
-    fitTT: false
+    fitTT: true
     fitgv: true
     fitLoge: false
     fitrho: true
@@ -80,4 +80,4 @@ experiments:
 
     mode: 1                   # 1=PP, 2=SS, 3=joint
     maxN: 50
-    runname: "run6_8c_N50_joint_PPTT_gv_geom_1_60_30_unc_0.1"
+    runname: "run7_8c_N50_joint_PPTT_gv_geom_1_60_30_unc_0.05_loge"

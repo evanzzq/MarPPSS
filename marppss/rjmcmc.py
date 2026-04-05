@@ -130,8 +130,8 @@ def calc_like_prob_travel_time(model, bookkeeping):
     arr_PP_obs = np.array([5.31, 10.93, 17.34])
     arr_SS_obs = np.array([18.0, 40.0, 63.0]) # NOT EDITTED!!!
 
-    arr_PP_unc = np.repeat(0.1, len(arr_PP_obs))
-    arr_SS_unc = np.repeat(0.1, len(arr_SS_obs))
+    arr_PP_unc = np.repeat(0.05, len(arr_PP_obs))
+    arr_SS_unc = np.repeat(0.05, len(arr_SS_obs))
 
     # -----------------------------
     # compute model travel times
@@ -141,6 +141,7 @@ def calc_like_prob_travel_time(model, bookkeeping):
 
         diff_PP = arr_PP_model - arr_PP_obs
 
+        arr_PP_unc *= np.exp(0.5 * model.loge_TT)
         logL_PP = -0.5 * np.sum((diff_PP / arr_PP_unc) ** 2)
         return logL_PP
 
@@ -149,6 +150,7 @@ def calc_like_prob_travel_time(model, bookkeeping):
 
         diff_SS = arr_SS_model - arr_SS_obs
 
+        arr_PP_unc *= np.exp(0.5 * model.loge_TT)
         logL_SS = -0.5 * np.sum((diff_SS / arr_SS_unc) ** 2)
         return logL_SS
 
@@ -158,122 +160,12 @@ def calc_like_prob_travel_time(model, bookkeeping):
         diff_PP = arr_PP_model - arr_PP_obs
         diff_SS = arr_SS_model - arr_SS_obs
 
+        arr_PP_unc *= np.exp(0.5 * model.loge_TT)
+        arr_SS_unc *= np.exp(0.5 * model.loge_TT2)
         logL_PP = -0.5 * np.sum((diff_PP / arr_PP_unc) ** 2)
         logL_SS = -0.5 * np.sum((diff_SS / arr_SS_unc) ** 2)
 
         return logL_PP + logL_SS
-
-# def calc_like_prob_gv(model, bookkeeping): # pysurf96 version
-#     import numpy as np
-#     from pysurf96 import surf96
-#     from pysurf96.wrapper import Surf96Error
-
-#     BAD = -1e100
-
-#     # reflectivity synthetics
-#     # linear periods
-#     # periods = np.linspace(5.0, 40.0, 36)
-#     # gv_obs = np.array([
-#     #     1.69656754, 1.66145027, # 1 - 4 s: 1.72839653, 1.72837877, 1.72668886, 1.71786654,
-#     #     1.61350799, 1.55622542, 1.49543488, 1.43975198, 1.40036607, 1.38716733,
-#     #     1.40364349, 1.44419086, 1.49859321, 1.5582273 , 1.61862147, 1.67796528,
-#     #     1.73590863, 1.79222584, 1.84663725, 1.89899302, 1.94907331, 1.99699152,
-#     #     2.04305935, 2.08771873, 2.13145232, 2.17471385, 2.21789861, 2.26130128,
-#     #     2.30510902, 2.34945178, 2.39400196, 2.43886352, 2.48355818, 2.52794838,
-#     #     2.57183361, 2.61504436, 2.65710568, 2.69810677
-#     # ])
-#     # gv_unc = np.repeat(0.001, 36)
-
-#     # log periods
-#     periods = np.geomspace(3.0, 40.0, 20)
-#     gv_obs = np.array([1.72672892, 1.72407758, 1.71869135, 1.70853543, 1.69143176, 1.66428125,
-#         1.62407768, 1.56874883, 1.49969077, 1.42871773, 1.38781106, 1.4191376,
-#         1.5223254,  1.65749979, 1.80499125, 1.95818055, 2.11287093, 2.28114462,
-#         2.47920442, 2.69810677])
-#     gv_unc = np.repeat(0.001, 20)
-
-#     if bookkeeping.fitrho or bookkeeping.mode == 3:
-#         vpvsr = np.asarray(model.rho, dtype=float)
-#     else:
-#         vpvsr = 1.8
-
-#     # convert interface depths to layer thicknesses
-#     H_interfaces = np.asarray(model.H, dtype=float)
-#     if H_interfaces.size == 0:
-#         H = np.array([0.0])
-#         thickness = np.array([])
-#     else:
-#         thickness = np.diff(np.r_[0.0, H_interfaces])
-#         H = np.r_[thickness, 0.0]
-
-#     # build model
-#     if bookkeeping.mode == 1:
-#         vp = np.asarray(model.v, dtype=float)
-#         vs = vp / vpvsr
-#     elif bookkeeping.mode == 2:
-#         vs = np.asarray(model.v, dtype=float)
-#         vp = vs * vpvsr
-#     elif bookkeeping.mode == 3:
-#         vs = np.asarray(model.v, dtype=float)
-#         vp = vs * vpvsr
-#     else:
-#         return BAD
-
-#     rho = 0.8 * vs
-
-#     # ---------- pre-checks ----------
-#     # finite and positive
-#     if np.any(~np.isfinite(vp)) or np.any(~np.isfinite(vs)) or np.any(~np.isfinite(rho)):
-#         return BAD
-#     if np.any(vp <= 0) or np.any(vs <= 0) or np.any(rho <= 0):
-#         return BAD
-
-#     # positive vp/vs
-#     if np.any(np.asarray(vpvsr) <= 0):
-#         return BAD
-
-#     # thickness must be positive, and not too tiny
-#     if thickness.size > 0:
-#         if np.any(thickness <= 0):
-#             return BAD
-#         if np.any(thickness < 0.05):   # adjust threshold as needed
-#             return BAD
-
-#     # actual Vs monotonicity is what matters
-#     if np.any(np.diff(vs) <= 0):
-#         return BAD
-
-#     # optional: also require Vp monotonicity
-#     if np.any(np.diff(vp) <= 0):
-#         return BAD
-
-#     # ---------- surf96 call ----------
-#     try:
-#         gv_model = surf96(
-#             H,
-#             vp,
-#             vs,
-#             rho,
-#             periods,
-#             wave="rayleigh",
-#             mode=1,
-#             velocity="group",
-#             flat_earth=True
-#         )
-#     except Surf96Error:
-#         return BAD
-#     except Exception:
-#         return BAD
-
-#     # check output
-#     if np.any(~np.isfinite(gv_model)):
-#         return BAD
-
-#     diff_gv = gv_model - gv_obs
-#     gv_unc = gv_unc * np.exp(0.5 * model.loge_gv)
-#     logL_gv = -0.5 * np.sum((diff_gv / gv_unc) ** 2)
-
-#     return logL_gv
 
 def calc_like_prob_gv(model, bookkeeping):
     import numpy as np
@@ -290,7 +182,7 @@ def calc_like_prob_gv(model, bookkeeping):
         1.32367671, 1.47286633, 1.68751274, 1.91983462, 2.14522436, 2.3505885,
         2.55207088, 2.76058425, 2.96288609, 3.13954886, 3.2822797,  3.39365548
     ])
-    gv_unc = np.repeat(0.1, 30)
+    gv_unc = np.repeat(0.05, 30)
 
     if bookkeeping.fitrho or bookkeeping.mode == 3:
         vpvsr = np.asarray(model.rho, dtype=float)
@@ -616,6 +508,16 @@ def update_loge_avg_vs(model, prior):
         return model_new, True
     return model, False
 
+def update_loge_TT(model, prior):
+    # Copy model
+    model_new = copy.deepcopy(model)
+    # Update
+    model_new.loge_TT += prior.logeStd * np.random.randn()
+    # Check range and return
+    if prior.logeRange[0] <= model_new.loge_TT <= prior.logeRange[1]:
+        return model_new, True
+    return model, False
+
 def update_v(model, prior, rayp):
     # Copy model
     model_new = copy.deepcopy(model)
@@ -722,7 +624,7 @@ def rjmcmc_run(P, D, prior, bookkeeping, saveDir, CDinv=None):
     ensemble = []
 
     # Action pool
-    actionPool = [2,9] # H, v
+    actionPool = [2,10] # H, v
     if not bookkeeping.fitTT: # fit full waveform
         actionPool = np.append(actionPool, [3]) # w
         if bookkeeping.mode == 3: actionPool = np.append(actionPool, [4]) # w2
@@ -730,9 +632,11 @@ def rjmcmc_run(P, D, prior, bookkeeping, saveDir, CDinv=None):
             if bookkeeping.mode in [1, 2]: actionPool = np.append(actionPool, [5]) # loge
             if bookkeeping.mode == 3: actionPool = np.append(actionPool, [5,6]) # loge and loge2
         if prior.maxN > 1: actionPool = np.append(actionPool, [0,1]) # birth, death
-    if bookkeeping.mode == 3 or ((bookkeeping.fitgv or bookkeeping.fitavgvs) and bookkeeping.fitrho): actionPool = np.append(actionPool, [10]) # rho
-    # if bookkeeping.fitgv: actionPool = np.append(actionPool, [7]) # loge_gv # commented out so loge_gv === 0
+    if bookkeeping.mode == 3 or ((bookkeeping.fitgv or bookkeeping.fitavgvs) and bookkeeping.fitrho): actionPool = np.append(actionPool, [11]) # rho
+    
+    if bookkeeping.fitgv: actionPool = np.append(actionPool, [7]) # loge_gv # commented out so loge_gv === 0
     # if bookkeeping.fitavgvs: actionPool = np.append(actionPool, [8])
+    if bookkeeping.fitTT: actionPool = np.append(actionPool, [9])
 
     for iStep in range(totalSteps):
 
@@ -759,8 +663,10 @@ def rjmcmc_run(P, D, prior, bookkeeping, saveDir, CDinv=None):
             elif action == 8:
                 model_new, _ = update_loge_avg_vs(model_new, prior)
             elif action == 9:
-                model_new, _ = update_v(model_new, prior, bookkeeping.rayp)
+                model_new, _ = update_loge_TT(model_new, prior)
             elif action == 10:
+                model_new, _ = update_v(model_new, prior, bookkeeping.rayp)
+            elif action == 101:
                 model_new, _ = update_rho(model_new, prior, bookkeeping.rayp)
 
         # Compute likelihood

@@ -5,12 +5,12 @@ import matplotlib.pyplot as plt
 from marppss.visualization import plot_velocity_ensemble, plot_posterior_num_phases, plot_predicted_vs_input, plot_posterior_error_params, plot_posterior_group_velocity_density, plot_velocity_density_image
 
 # ==== Config ====
-filedir = "H:/My Drive/Research/MarPPSS"
-# filedir = "/Users/evanzhang/zzq@umd.edu - Google Drive/My Drive/Research/MarPPSS"
+# filedir = "H:/My Drive/Research/MarPPSS"
+filedir = "/Users/evanzhang/zzq@umd.edu - Google Drive/My Drive/Research/MarPPSS"
 
 # ---- User-defined experiment/run ----
-expname = "S0976asdr_1877_src_3.5_s_SS"   # folder under run/
-runname = "run5_8c_N50_joint_PPTT0_gv_geom_1_60_30_unc_0.02_loge"                     # subfolder under that
+expname = "S0976asdr_1877_src_3.5_s_PP"   # folder under run/
+runname = "run7_8c_N50_joint_PPTT_gv_geom_1_60_30_unc_0.05_loge"                     # subfolder under that
 
 # ---- Explicit data dirs (user-specified) ----
 PPdir = "S0976asdr_1877_src_3.5_s_PP"        # folder under data/
@@ -166,8 +166,8 @@ else:
 
 
 H_true=np.array([10, 24, 48])
-# v_true=np.array([3.8, 4.5, 6.22, 7.67])
-v_true=np.array([1.85, 2.8, 3.75, 4.33])
+v_true=np.array([3.8, 4.5, 6.22, 7.67])
+# v_true=np.array([1.85, 2.8, 3.75, 4.33])
 rho_true=np.array([2.054, 1.607, 1.659, 1.771])
 
 plot_velocity_ensemble(ensemble_all, bookkeeping, prior.HRange, 

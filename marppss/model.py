@@ -61,6 +61,8 @@ class Model:
     loge2: float # in mode 3 (joint), loge is for PP and loge2 is for SS
     loge_gv: float # for group velocity measurements
     loge_avg_vs: float # for average vs fit
+    loge_TT: float # for travel times (mode 1/2: for PP or SS)
+    loge_TT2: float # for travel times (mode 3: loge_TT is for PP and loge_TT2 is for SS)
     v: np.ndarray # len(v) = len(H) + 1
     rho: np.ndarray # len(rho) = len(v) = len(H) + 1
 
@@ -85,6 +87,8 @@ class Model:
             loge2=0.,
             loge_gv=0.,
             loge_avg_vs=0.,
+            loge_TT=0.,
+            loge_TT2=0.,
             v=v,
             rho=rho
         )
