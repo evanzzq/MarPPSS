@@ -5,12 +5,12 @@ import matplotlib.pyplot as plt
 from marppss.visualization import plot_velocity_ensemble, plot_posterior_num_phases, plot_predicted_vs_input, plot_posterior_error_params, plot_posterior_group_velocity_density, plot_velocity_density_image
 
 # ==== Config ====
-# filedir = "H:/My Drive/Research/MarPPSS"
-filedir = "/Users/evanzhang/zzq@umd.edu - Google Drive/My Drive/Research/MarPPSS"
+filedir = "H:/My Drive/Research/MarPPSS"
+# filedir = "/Users/evanzhang/zzq@umd.edu - Google Drive/My Drive/Research/MarPPSS"
 
 # ---- User-defined experiment/run ----
 expname = "S0976asdr_1877_src_3.5_s_PP"   # folder under run/
-runname = "run7_8c_N50_joint_PPTT_gv_geom_1_60_30_unc_0.05_loge"                     # subfolder under that
+runname = "run9_8c_N50_joint_PPTT_gv_1_60_30_unc_0.2_0.2"                     # subfolder under that
 
 # ---- Explicit data dirs (user-specified) ----
 PPdir = "S0976asdr_1877_src_3.5_s_PP"        # folder under data/
@@ -172,7 +172,8 @@ rho_true=np.array([2.054, 1.607, 1.659, 1.771])
 
 plot_velocity_ensemble(ensemble_all, bookkeeping, prior.HRange, 
                        H_true=H_true, v_true=v_true, rho_true=rho_true)
-plot_velocity_density_image(ensemble_all, bookkeeping, prior.HRange, nz=200, nv=200, smooth_sigma=2.0)
+plot_velocity_density_image(ensemble_all, bookkeeping, prior.HRange, nz=200, nv=200, smooth_sigma=2.0,
+                            H_true=H_true, v_true=v_true, rho_true=rho_true)
 
 plot_predicted_vs_input(ensemble_all, P, D, prior, bookkeeping)
 plot_posterior_error_params(ensemble_all, bookkeeping)
@@ -186,10 +187,10 @@ plot_posterior_num_phases(ensemble_all)
 periods = np.geomspace(1.0, 60.0, 30)
 gv_obs = np.array([
     1.72831393, 1.72831515, 1.72831393, 1.72831515, 1.72826632, 1.72826998,
-    1.72809057, 1.72757214, 1.72604118, 1.72239639, 1.71488613, 1.70093261,
-    1.67697467, 1.63877135, 1.58146902, 1.50134315, 1.40219812, 1.31540982,
-    1.32367671, 1.47286633, 1.68751274, 1.91983462, 2.14522436, 2.3505885,
-    2.55207088, 2.76058425, 2.96288609, 3.13954886, 3.2822797,  3.39365548
+    1.72813817, 1.72766238, 1.72625655, 1.72298695, 1.71618461, 1.70369458,
+    1.68260864, 1.64959752, 1.60149205, 1.53709264, 1.4621401,  1.39993361,
+    1.39617903, 1.47724876, 1.60899818, 1.7582251,  1.91592707, 2.07528614,
+    2.24488849, 2.4438849,  2.66871742, 2.88931588, 3.07926004, 3.23077445
 ])
 if bookkeeping.fitgv:
     plot_posterior_group_velocity_density(

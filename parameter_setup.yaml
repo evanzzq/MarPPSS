@@ -1,7 +1,7 @@
 common:
 
-  basedir: "/Users/evanzhang/zzq@umd.edu - Google Drive/My Drive/Research"
-  # basedir: "H:/My Drive/Research"
+  # basedir: "/Users/evanzhang/zzq@umd.edu - Google Drive/My Drive/Research"
+  basedir: "H:/My Drive/Research"
 
   datadir_subpaths:
     - "SharpSSPy"
@@ -76,8 +76,8 @@ experiments:
     burnInSteps: 600000
     nSaveModels: 200
     actionsPerStep: 1
-    num_chains: 8
+    num_chains: 96
 
     mode: 1                   # 1=PP, 2=SS, 3=joint
     maxN: 50
-    runname: "run7_8c_N50_joint_PPTT_gv_geom_1_60_30_unc_0.05_loge"
+    runname: "run9_96c_N50_joint_PPTT_gv_1_60_30_unc_0.2_0.2"

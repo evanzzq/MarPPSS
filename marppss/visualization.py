@@ -83,10 +83,18 @@ def plot_velocity_ensemble(models,
                            rho_true=None,
                            true_kwargs=None):
     """
-    Plot an ensemble of velocity models (v vs depth) as step profiles.
+    Plot an ensemble of velocity models as step profiles.
 
-    Optional reference/true model:
-    ------------------------------
+    Behavior
+    --------
+    - mode in (1, 2) and not fitgv:
+        one figure for single velocity
+    - mode == 3 or (fitgv and fitrho):
+        one figure for Vp & Vs
+        one additional figure for Vp/Vs
+
+    Optional reference/true model
+    -----------------------------
     H_true : array-like or None
         Depths of discontinuities for the reference model.
     v_true : array-like or None
@@ -97,28 +105,37 @@ def plot_velocity_ensemble(models,
           - mode 3: v_true = Vs
     rho_true : array-like, float, or None
         Vp/Vs ratio for the reference model when needed.
-        Required if plotting both Vp and Vs from the true model.
     true_kwargs : dict or None
         Extra kwargs for plotting the true model, e.g.
         {"linewidth": 2.5, "linestyle": "--"}.
+
+    Returns
+    -------
+    figs, axes : dict
+        Dictionary of figures/axes:
+          - single-velocity case: {"vel": (fig, ax)}
+          - Vp/Vs case: {"vpvs": (fig_ratio, ax_ratio), "vp_vs": (fig_vel, ax_vel)}
     """
     mode = bookkeeping.mode
     fitgv = bookkeeping.fitgv
     fitrho = bookkeeping.fitrho
     H_min, H_max = HRange
 
-    fig, ax = plt.subplots(figsize=(5, 7))
-
     if true_kwargs is None:
         true_kwargs = {"linewidth": 2.5, "linestyle": "--"}
 
+    outputs = {}
+
+    # ---------------------------------------------------------
+    # Case 1: single velocity only
+    # ---------------------------------------------------------
     if mode in (1, 2) and not fitgv:
-        # Single-velocity ensemble
+        fig, ax = plt.subplots(figsize=(5, 7))
+
         for m in models:
             vx, z = _model_to_step_profile(m.H, m.v, HRange)
             ax.plot(vx, z, color="C0", alpha=alpha, linewidth=linewidth)
 
-        # Reference model
         if H_true is not None and v_true is not None:
             vx_true, z_true = _model_to_step_profile(H_true, v_true, HRange)
             ax.plot(vx_true, z_true, color="k", label="Reference", **true_kwargs)
@@ -127,15 +144,32 @@ def plot_velocity_ensemble(models,
         legend_handles = [Line2D([0], [0], color="C0", lw=linewidth, label="v")]
         if H_true is not None and v_true is not None:
             legend_handles.append(
-                Line2D([0], [0], color="k",
+                Line2D([0], [0],
+                       color="k",
                        lw=true_kwargs.get("linewidth", 2.5),
                        linestyle=true_kwargs.get("linestyle", "--"),
                        label="Reference")
             )
         ax.legend(handles=legend_handles, loc="lower right")
 
+        ax.set_xlabel("Velocity (km/s)")
+        ax.set_ylabel("Depth (km)")
+        ax.set_ylim(H_max, 0.0)
+        ax.grid(alpha=0.3)
+
+        plt.tight_layout()
+        plt.show()
+
+        outputs["vel"] = (fig, ax)
+        return outputs
+
+    # ---------------------------------------------------------
+    # Case 2: both Vp and Vs exist
+    # ---------------------------------------------------------
     elif mode == 3 or (fitgv and fitrho):
-        # Vs and Vp ensemble
+
+        # ---------- Figure 1: Vp and Vs ----------
+        fig_vel, ax_vel = plt.subplots(figsize=(5, 7))
         first_vs = True
         first_vp = True
 
@@ -148,29 +182,29 @@ def plot_velocity_ensemble(models,
             elif mode in (2, 3):
                 vs = np.asarray(m.v, dtype=float)
                 vp = vs * vpvsr
+            else:
+                raise ValueError(f"Unsupported mode={mode}")
 
-            # Vs profile
             vx_vs, z_vs = _model_to_step_profile(m.H, vs, HRange)
-            ax.plot(vx_vs, z_vs,
-                    color="C0",
-                    alpha=alpha,
-                    linewidth=linewidth,
-                    label="Vs" if first_vs else None)
+            ax_vel.plot(vx_vs, z_vs,
+                        color="C0",
+                        alpha=alpha,
+                        linewidth=linewidth,
+                        label="Vs" if first_vs else None)
             first_vs = False
 
-            # Vp profile
             vx_vp, z_vp = _model_to_step_profile(m.H, vp, HRange)
-            ax.plot(vx_vp, z_vp,
-                    color="C1",
-                    alpha=alpha,
-                    linewidth=linewidth,
-                    label="Vp" if first_vp else None)
+            ax_vel.plot(vx_vp, z_vp,
+                        color="C1",
+                        alpha=alpha,
+                        linewidth=linewidth,
+                        label="Vp" if first_vp else None)
             first_vp = False
 
-        # Reference model
+        # True model for Vp and Vs
         if H_true is not None and v_true is not None:
             if rho_true is None:
-                raise ValueError("rho_true must be provided to plot reference Vp/Vs model.")
+                raise ValueError("rho_true must be provided to plot true model when both Vp and Vs are present.")
 
             rho_true = np.asarray(rho_true, dtype=float)
 
@@ -182,28 +216,67 @@ def plot_velocity_ensemble(models,
                 vp_true = vs_true * rho_true
 
             vx_vs_true, z_vs_true = _model_to_step_profile(H_true, vs_true, HRange)
-            ax.plot(vx_vs_true, z_vs_true,
-                    color="navy", label="Vs true", **true_kwargs)
+            ax_vel.plot(vx_vs_true, z_vs_true,
+                        color="navy", label="Vs true", **true_kwargs)
 
             vx_vp_true, z_vp_true = _model_to_step_profile(H_true, vp_true, HRange)
-            ax.plot(vx_vp_true, z_vp_true,
-                    color="r", label="Vp true", **true_kwargs)
+            ax_vel.plot(vx_vp_true, z_vp_true,
+                        color="r", label="Vp true", **true_kwargs)
 
-        ax.set_title("Velocity ensemble (Vp & Vs)")
-        ax.legend(loc="lower right")
+        ax_vel.set_title("Velocity ensemble (Vp & Vs)")
+        ax_vel.set_xlabel("Velocity (km/s)")
+        ax_vel.set_ylabel("Depth (km)")
+        ax_vel.set_ylim(H_max, 0.0)
+        ax_vel.grid(alpha=0.3)
+        ax_vel.legend(loc="lower right")
+
+        plt.tight_layout()
+        plt.show()
+
+        # ---------- Figure 2: Vp/Vs ----------
+        fig_ratio, ax_ratio = plt.subplots(figsize=(5, 7))
+
+        for m in models:
+            vpvsr = np.asarray(m.rho, dtype=float)
+            vx_ratio, z_ratio = _model_to_step_profile(m.H, vpvsr, HRange)
+            ax_ratio.plot(vx_ratio, z_ratio,
+                          color="C2",
+                          alpha=alpha,
+                          linewidth=linewidth)
+
+        # True model for Vp/Vs
+        if H_true is not None and rho_true is not None:
+            rho_true = np.asarray(rho_true, dtype=float)
+            vx_ratio_true, z_ratio_true = _model_to_step_profile(H_true, rho_true, HRange)
+            ax_ratio.plot(vx_ratio_true, z_ratio_true,
+                          color="r", label="Vp/Vs true", **true_kwargs)
+
+        legend_handles = [Line2D([0], [0], color="C2", lw=linewidth, label="Vp/Vs")]
+        if H_true is not None and rho_true is not None:
+            legend_handles.append(
+                Line2D([0], [0],
+                       color="r",
+                       lw=true_kwargs.get("linewidth", 2.5),
+                       linestyle=true_kwargs.get("linestyle", "--"),
+                       label="Vp/Vs true")
+            )
+        ax_ratio.legend(handles=legend_handles, loc="lower right")
+
+        ax_ratio.set_title("Velocity ensemble (Vp/Vs)")
+        ax_ratio.set_xlabel("Vp/Vs")
+        ax_ratio.set_ylabel("Depth (km)")
+        ax_ratio.set_ylim(H_max, 0.0)
+        ax_ratio.grid(alpha=0.3)
+
+        plt.tight_layout()
+        plt.show()
+
+        outputs["vp_vs"] = (fig_vel, ax_vel)
+        outputs["vpvs"] = (fig_ratio, ax_ratio)
+        return outputs
 
     else:
         raise ValueError(f"Unsupported mode={mode}. Expected 1, 2, or 3.")
-
-    ax.set_xlabel("Velocity (km/s)")
-    ax.set_ylabel("Depth (km)")
-    ax.set_ylim(H_max, 0.0)
-    ax.grid(alpha=0.3)
-
-    plt.tight_layout()
-    plt.show()
-
-    return fig, ax
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -278,92 +351,109 @@ def plot_velocity_density_image(models,
                                 vmin=None,
                                 vmax=None,
                                 cmap="viridis",
-                                smooth_sigma=None):
+                                smooth_sigma=None,
+                                H_true=None,
+                                v_true=None,
+                                rho_true=None,
+                                true_kwargs=None):
     """
     Make a 2D density map of velocity vs depth from an ensemble of models.
 
-    - y-axis: depth
-    - x-axis: velocity
-    - color: density of samples (probability-like)
-
-    This is your "image-style" view instead of spaghetti.
+    Optional true model overlay:
+    ----------------------------
+    H_true : array-like
+        Discontinuity depths of true model.
+    v_true : array-like
+        True model velocity array.
+    rho_true : array-like or float
+        True model Vp/Vs ratio, used when plotting Vp/Vs.
+    true_kwargs : dict
+        Plotting kwargs for true model overlay.
     """
-    from math import isfinite
-
-    depth_grid, vel_profiles = sample_models_to_depth_grid(models, bookkeeping, HRange, nz=nz)
+    depth_grid, vel_profiles = sample_models_to_depth_grid(
+        models, bookkeeping, HRange, nz=nz
+    )
+    H_min, H_max = HRange
 
     if vmin is None:
         vmin = np.nanmin(vel_profiles)
     if vmax is None:
         vmax = np.nanmax(vel_profiles)
 
-    # 2D histogram: we treat all (depth, velocity) samples together
-    z_samples = np.tile(depth_grid, vel_profiles.shape[0])      # (n_models * nz,)
+    z_samples = np.tile(depth_grid, vel_profiles.shape[0])
     v_samples = vel_profiles.ravel()
 
-    # Remove NaNs/inf if any
     mask = np.isfinite(z_samples) & np.isfinite(v_samples)
     z_samples = z_samples[mask]
     v_samples = v_samples[mask]
 
-    # Bin edges
     z_edges = np.linspace(HRange[0], HRange[1], nz + 1)
     v_edges = np.linspace(vmin, vmax, nv + 1)
 
-    # Histogram in (depth, velocity)
     density, z_edges, v_edges = np.histogram2d(
         z_samples, v_samples,
         bins=[z_edges, v_edges],
         density=True,
-    )   # density.shape = (nz, nv)
+    )
 
-    # Optional smoothing (if you have SciPy)
     try:
         if smooth_sigma is not None:
             from scipy.ndimage import gaussian_filter
             density = gaussian_filter(density, sigma=smooth_sigma)
     except ImportError:
-        pass  # silently ignore if SciPy not installed
+        pass
 
-    # Bin centers for plotting
     z_centers = 0.5 * (z_edges[:-1] + z_edges[1:])
     v_centers = 0.5 * (v_edges[:-1] + v_edges[1:])
 
-    # ---- Normal figure for viewing ----
     plt.figure(figsize=(5, 7))
     lo = np.percentile(density, 50)
     hi = np.percentile(density, 97)
 
-    im = plt.pcolormesh(v_centers, z_centers, density, shading="auto",
-                        cmap=cmap, vmin=lo, vmax=hi)
+    plt.pcolormesh(
+        v_centers, z_centers, density,
+        shading="auto", cmap=cmap, vmin=lo, vmax=hi
+    )
     plt.colorbar(label="Density")
 
-    plt.xlabel("Velocity (km/s)")
+    mode = bookkeeping.mode
+    fitgv = bookkeeping.fitgv
+    fitrho = bookkeeping.fitrho
+
+    # ----- true model overlay as step profile -----
+    if H_true is not None and v_true is not None:
+        if true_kwargs is None:
+            true_kwargs = {"color": "r", "linestyle": "--", "linewidth": 2.0}
+
+        if mode in (1, 2) and not fitgv:
+            true_layer = np.asarray(v_true, dtype=float)
+
+        elif mode == 3 or (fitgv and fitrho):
+            if rho_true is None:
+                raise ValueError("rho_true must be provided when plotting Vp/Vs.")
+            true_layer = np.asarray(rho_true, dtype=float)   # plot Vp/Vs
+
+        else:
+            raise ValueError(f"Unsupported mode={mode} for true model overlay.")
+
+        vx_true, z_true = _model_to_step_profile(H_true, true_layer, HRange)
+        plt.plot(vx_true, z_true, label="True model", **true_kwargs)
+        plt.legend()
+
+    # label
+    if mode == 3 or (fitgv and fitrho):
+        plt.xlabel("Vp/Vs")
+        plt.title("Velocity ensemble density (Vp/Vs vs depth)")
+    else:
+        plt.xlabel("Velocity (km/s)")
+        plt.title("Velocity ensemble density (v vs depth)")
+
+    plt.ylim(0.0, H_max)
     plt.ylabel("Depth (km)")
-    # plt.xlim(1.75, 1.95)
     plt.gca().invert_yaxis()
-    plt.title("Velocity ensemble density (v vs depth)")
     plt.grid(alpha=0.2)
     plt.tight_layout()
     plt.show()
-
-    # ---- Clean PNG export (no axes, no labels, no colorbar, no title) ----
-    fig2, ax2 = plt.subplots(figsize=(5, 7))
-    ax2.pcolormesh(v_centers, z_centers, density, shading="auto",
-                cmap=cmap, vmin=lo, vmax=hi)
-
-    # match limits
-    # ax2.set_xlim(1.5, 8)
-    ax2.invert_yaxis()
-
-    # remove everything
-    ax2.set_axis_off()
-
-    plt.savefig("vel_ensemble_clean.png",
-                dpi=400,
-                bbox_inches='tight',
-                pad_inches=0)
-    plt.close(fig2)
 
 def plot_predicted_vs_input(ensemble, P, D_obs, prior, bookkeeping):
     """

@@ -131,7 +131,7 @@ def calc_like_prob_travel_time(model, bookkeeping):
     arr_SS_obs = np.array([18.0, 40.0, 63.0]) # NOT EDITTED!!!
 
     arr_PP_unc = np.repeat(0.05, len(arr_PP_obs))
-    arr_SS_unc = np.repeat(0.05, len(arr_SS_obs))
+    arr_SS_unc = np.repeat(0.2, len(arr_SS_obs))
 
     # -----------------------------
     # compute model travel times
@@ -177,12 +177,12 @@ def calc_like_prob_gv(model, bookkeeping):
     periods = np.geomspace(1.0, 60.0, 30)
     gv_obs = np.array([
         1.72831393, 1.72831515, 1.72831393, 1.72831515, 1.72826632, 1.72826998,
-        1.72809057, 1.72757214, 1.72604118, 1.72239639, 1.71488613, 1.70093261,
-        1.67697467, 1.63877135, 1.58146902, 1.50134315, 1.40219812, 1.31540982,
-        1.32367671, 1.47286633, 1.68751274, 1.91983462, 2.14522436, 2.3505885,
-        2.55207088, 2.76058425, 2.96288609, 3.13954886, 3.2822797,  3.39365548
+        1.72813817, 1.72766238, 1.72625655, 1.72298695, 1.71618461, 1.70369458,
+        1.68260864, 1.64959752, 1.60149205, 1.53709264, 1.4621401,  1.39993361,
+        1.39617903, 1.47724876, 1.60899818, 1.7582251,  1.91592707, 2.07528614,
+        2.24488849, 2.4438849,  2.66871742, 2.88931588, 3.07926004, 3.23077445
     ])
-    gv_unc = np.repeat(0.05, 30)
+    gv_unc = np.repeat(0.2, 30)
 
     if bookkeeping.fitrho or bookkeeping.mode == 3:
         vpvsr = np.asarray(model.rho, dtype=float)
@@ -584,7 +584,7 @@ def rjmcmc_run(P, D, prior, bookkeeping, saveDir, CDinv=None):
     if not bookkeeping.fitTT: 
         model = Model.create_initial(prior=prior)
     else:
-        model = Model.create_initial(prior=prior, Nlayer=3) # HARD CODED!!!
+        model = Model.create_initial(prior=prior, Nlayer=3) # HARD CODED!!! Nlayer=3
 
     # Initial likelihood
     logL_trace = []
@@ -601,6 +601,7 @@ def rjmcmc_run(P, D, prior, bookkeeping, saveDir, CDinv=None):
             logL_SS_trace.append(logL_SS)
     else:
         logL = calc_like_prob_travel_time(model, bookkeeping)
+        # logL = 0 # testing gv only!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
     # fitgv and fitavgvs - only max 1 should be turned on
     if bookkeeping.fitgv: 
@@ -624,7 +625,7 @@ def rjmcmc_run(P, D, prior, bookkeeping, saveDir, CDinv=None):
     ensemble = []
 
     # Action pool
-    actionPool = [2,10] # H, v
+    actionPool = [2,10] # H, v # birth/death!!!!
     if not bookkeeping.fitTT: # fit full waveform
         actionPool = np.append(actionPool, [3]) # w
         if bookkeeping.mode == 3: actionPool = np.append(actionPool, [4]) # w2
@@ -634,9 +635,9 @@ def rjmcmc_run(P, D, prior, bookkeeping, saveDir, CDinv=None):
         if prior.maxN > 1: actionPool = np.append(actionPool, [0,1]) # birth, death
     if bookkeeping.mode == 3 or ((bookkeeping.fitgv or bookkeeping.fitavgvs) and bookkeeping.fitrho): actionPool = np.append(actionPool, [11]) # rho
     
-    if bookkeeping.fitgv: actionPool = np.append(actionPool, [7]) # loge_gv # commented out so loge_gv === 0
+    # if bookkeeping.fitgv: actionPool = np.append(actionPool, [7]) # loge_gv # commented out so loge_gv === 0
     # if bookkeeping.fitavgvs: actionPool = np.append(actionPool, [8])
-    if bookkeeping.fitTT: actionPool = np.append(actionPool, [9])
+    # if bookkeeping.fitTT: actionPool = np.append(actionPool, [9])
 
     for iStep in range(totalSteps):
 
@@ -681,6 +682,7 @@ def rjmcmc_run(P, D, prior, bookkeeping, saveDir, CDinv=None):
         # CASE 2: FIT ONLY TRAVEL TIME
         else:
             new_logL = calc_like_prob_travel_time(model_new, bookkeeping)
+            # new_logL = 0 # testing gv only!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
         # Then add fitgv and fitavgvs as needed
         if bookkeeping.fitgv: 
             new_logL_gv = calc_like_prob_gv(model_new, bookkeeping)
