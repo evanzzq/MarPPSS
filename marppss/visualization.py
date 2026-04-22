@@ -81,7 +81,8 @@ def plot_velocity_ensemble(models,
                            H_true=None,
                            v_true=None,
                            rho_true=None,
-                           true_kwargs=None):
+                           true_kwargs=None,
+                           show=True):
     """
     Plot an ensemble of velocity models as step profiles.
 
@@ -158,7 +159,8 @@ def plot_velocity_ensemble(models,
         ax.grid(alpha=0.3)
 
         plt.tight_layout()
-        plt.show()
+        if show:
+            plt.show()
 
         outputs["vel"] = (fig, ax)
         return outputs
@@ -231,7 +233,8 @@ def plot_velocity_ensemble(models,
         ax_vel.legend(loc="lower right")
 
         plt.tight_layout()
-        plt.show()
+        if show:
+            plt.show()
 
         # ---------- Figure 2: Vp/Vs ----------
         fig_ratio, ax_ratio = plt.subplots(figsize=(5, 7))
@@ -269,7 +272,8 @@ def plot_velocity_ensemble(models,
         ax_ratio.grid(alpha=0.3)
 
         plt.tight_layout()
-        plt.show()
+        if show:
+            plt.show()
 
         outputs["vp_vs"] = (fig_vel, ax_vel)
         outputs["vpvs"] = (fig_ratio, ax_ratio)
@@ -308,14 +312,17 @@ def _eval_profile_on_depths(H, v, depth_grid):
     return v[idx]
 
 
-def sample_models_to_depth_grid(models, bookkeeping, HRange, nz=200):
+def sample_models_to_depth_grid(models, bookkeeping, HRange, nz=200, field="auto"):
     """
     Sample all models in the ensemble on a common depth grid.
+
+    field : {"auto", "velocity", "ratio"}
+        Quantity to sample. "auto" preserves the current plotting convention.
 
     Returns
     -------
     depth_grid : (nz,)
-    vel_profiles : (n_models, nz)  # for one velocity field (v or Vs or Vp)
+    vel_profiles : (n_models, nz)
     """
     H_min, H_max = HRange
     depth_grid = np.linspace(H_min, H_max, nz)
@@ -327,14 +334,16 @@ def sample_models_to_depth_grid(models, bookkeeping, HRange, nz=200):
 
     for m in models:
         if mode in (1, 2) and not fitgv:
-            # Single velocity in m.v
             v_layer = np.asarray(m.v, dtype=float)
         elif mode == 3 or (fitgv and fitrho):
-            # Example: use Vs (you can swap to Vp if you want)
-            vp = np.asarray(m.v, dtype=float)
-            ratio = np.asarray(m.rho, dtype=float)  # rho = Vp/Vs
-            vs = vp / ratio
-            v_layer = ratio
+            ratio = np.asarray(m.rho, dtype=float)
+            if field == "ratio":
+                v_layer = ratio
+            elif mode == 1:
+                vp = np.asarray(m.v, dtype=float)
+                v_layer = vp / ratio
+            else:
+                v_layer = np.asarray(m.v, dtype=float)
         else:
             raise ValueError(f"Unsupported mode={mode} for sampling.")
 
@@ -355,7 +364,9 @@ def plot_velocity_density_image(models,
                                 H_true=None,
                                 v_true=None,
                                 rho_true=None,
-                                true_kwargs=None):
+                                true_kwargs=None,
+                                field="auto",
+                                show=True):
     """
     Make a 2D density map of velocity vs depth from an ensemble of models.
 
@@ -370,8 +381,14 @@ def plot_velocity_density_image(models,
     true_kwargs : dict
         Plotting kwargs for true model overlay.
     """
+    mode = bookkeeping.mode
+    fitgv = bookkeeping.fitgv
+    fitrho = bookkeeping.fitrho
+    if field == "auto":
+        field = "ratio" if (mode == 3 or (fitgv and fitrho)) else "velocity"
+
     depth_grid, vel_profiles = sample_models_to_depth_grid(
-        models, bookkeeping, HRange, nz=nz
+        models, bookkeeping, HRange, nz=nz, field=field
     )
     H_min, H_max = HRange
 
@@ -416,32 +433,26 @@ def plot_velocity_density_image(models,
     )
     plt.colorbar(label="Density")
 
-    mode = bookkeeping.mode
-    fitgv = bookkeeping.fitgv
-    fitrho = bookkeeping.fitrho
-
     # ----- true model overlay as step profile -----
     if H_true is not None and v_true is not None:
         if true_kwargs is None:
             true_kwargs = {"color": "r", "linestyle": "--", "linewidth": 2.0}
 
-        if mode in (1, 2) and not fitgv:
+        if field == "velocity":
             true_layer = np.asarray(v_true, dtype=float)
-
-        elif mode == 3 or (fitgv and fitrho):
+        elif field == "ratio":
             if rho_true is None:
                 raise ValueError("rho_true must be provided when plotting Vp/Vs.")
-            true_layer = np.asarray(rho_true, dtype=float)   # plot Vp/Vs
-
+            true_layer = np.asarray(rho_true, dtype=float)
         else:
-            raise ValueError(f"Unsupported mode={mode} for true model overlay.")
+            raise ValueError(f"Unsupported density field={field!r}.")
 
         vx_true, z_true = _model_to_step_profile(H_true, true_layer, HRange)
         plt.plot(vx_true, z_true, label="True model", **true_kwargs)
         plt.legend()
 
     # label
-    if mode == 3 or (fitgv and fitrho):
+    if field == "ratio":
         plt.xlabel("Vp/Vs")
         plt.title("Velocity ensemble density (Vp/Vs vs depth)")
     else:
@@ -453,9 +464,10 @@ def plot_velocity_density_image(models,
     plt.gca().invert_yaxis()
     plt.grid(alpha=0.2)
     plt.tight_layout()
-    plt.show()
+    if show:
+        plt.show()
 
-def plot_predicted_vs_input(ensemble, P, D_obs, prior, bookkeeping):
+def plot_predicted_vs_input(ensemble, P, D_obs, prior, bookkeeping, show=True):
     """
     Plot predicted vs input data (D).
 
@@ -506,7 +518,8 @@ def plot_predicted_vs_input(ensemble, P, D_obs, prior, bookkeeping):
         plt.grid(True, alpha=0.3)
         plt.legend(loc="upper right")
         plt.tight_layout()
-        plt.show()
+        if show:
+            plt.show()
 
     elif mode == 3:
         # -------- Two-component case: PP and SS --------
@@ -540,12 +553,13 @@ def plot_predicted_vs_input(ensemble, P, D_obs, prior, bookkeeping):
         ax_ss.legend(loc="upper right")
 
         plt.tight_layout()
-        plt.show()
+        if show:
+            plt.show()
 
     else:
         raise ValueError(f"Unsupported mode={mode}. Expected 1, 2, or 3.")
 
-def plot_posterior_error_params(ensemble, bookkeeping, bins=40, figsize=(6, 8), density=True):
+def plot_posterior_error_params(ensemble, bookkeeping, bins=40, figsize=(6, 8), density=True, show=True):
     """
     Plot posterior histograms of error hyperparameters:
       - mode 1/2: loge
@@ -569,6 +583,7 @@ def plot_posterior_error_params(ensemble, bookkeeping, bins=40, figsize=(6, 8), 
     """
 
     mode = bookkeeping.mode
+    fit_waveform = getattr(bookkeeping, "fitWaveform", not bookkeeping.fitTT)
 
     # Decide how many panels
     n_panels = 0
@@ -580,19 +595,19 @@ def plot_posterior_error_params(ensemble, bookkeeping, bins=40, figsize=(6, 8), 
     plot_loge_TT2 = False
 
     if mode in (1, 2):
-        if not bookkeeping.fitTT:
+        if fit_waveform:
             plot_loge = True
-        else:
+        if bookkeeping.fitTT:
             plot_loge_TT = True
-        n_panels += 1
+        n_panels += int(plot_loge) + int(plot_loge_TT)
     elif mode == 3:
-        if not bookkeeping.fitTT:
+        if fit_waveform:
             plot_loge = True
             plot_loge2 = True
-        else:
+        if bookkeeping.fitTT:
             plot_loge_TT = True
             plot_loge_TT2 = True
-        n_panels += 2
+        n_panels += 2 * int(fit_waveform) + 2 * int(bookkeeping.fitTT)
 
     if bookkeeping.fitgv:
         plot_loge_gv = True
@@ -698,9 +713,10 @@ def plot_posterior_error_params(ensemble, bookkeeping, bins=40, figsize=(6, 8), 
             ax.set_axis_off()
 
     plt.tight_layout()
-    plt.show()
+    if show:
+        plt.show()
 
-def plot_posterior_num_phases(ensemble, bins=None, figsize=(6, 4), density=False):
+def plot_posterior_num_phases(ensemble, bins=None, figsize=(6, 4), density=False, show=True):
     """
     Plot a posterior histogram of the number of phases (model.Nlayer) 
     in the ensemble (after burn-in).
@@ -739,7 +755,8 @@ def plot_posterior_num_phases(ensemble, bins=None, figsize=(6, 4), density=False
     ax.set_xticks(np.unique(nlayer_vals))
 
     plt.tight_layout()
-    plt.show()
+    if show:
+        plt.show()
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -757,28 +774,53 @@ def compute_gv_for_model(model, bookkeeping, periods, vpvsr=1.8,
     H_interfaces = np.asarray(model.H, dtype=float)
     if H_interfaces.size == 0:
         H = np.array([0.0])
+        thickness = np.array([])
     else:
         thickness = np.diff(np.r_[0.0, H_interfaces])
         H = np.r_[thickness, 0.0]
 
+    if getattr(bookkeeping, "fitrho", False) or bookkeeping.mode == 3:
+        vpvsr_eff = np.asarray(model.rho, dtype=float)
+    else:
+        vpvsr_eff = np.asarray(vpvsr, dtype=float)
+
     if bookkeeping.mode == 1:
         vp = np.asarray(model.v, dtype=float)
-        vs = vp / vpvsr
+        vs = vp / vpvsr_eff
     elif bookkeeping.mode == 2:
         vs = np.asarray(model.v, dtype=float)
-        vp = vs * vpvsr
+        vp = vs * vpvsr_eff
     elif bookkeeping.mode == 3:
         vs = np.asarray(model.v, dtype=float)
-        vp = vs * np.asarray(model.rho, dtype=float)
+        vp = vs * vpvsr_eff
     else:
         raise ValueError(f"Unsupported bookkeeping.mode = {bookkeeping.mode}")
 
     rho = 0.8 * vs
 
-    disp = GroupDispersion(H, vp, vs, rho)
-    gv_model = disp(periods, mode=mode, wave=wave).velocity
+    if np.any(~np.isfinite(vp)) or np.any(~np.isfinite(vs)) or np.any(~np.isfinite(rho)):
+        return np.full_like(periods, np.nan, dtype=float)
+    if np.any(vp <= 0) or np.any(vs <= 0) or np.any(rho <= 0):
+        return np.full_like(periods, np.nan, dtype=float)
+    if np.any(np.asarray(vpvsr_eff) <= 0):
+        return np.full_like(periods, np.nan, dtype=float)
+    if thickness.size > 0:
+        if np.any(thickness <= 0) or np.any(thickness < 0.05):
+            return np.full_like(periods, np.nan, dtype=float)
+    if np.any(np.diff(vs) <= 0) or np.any(np.diff(vp) <= 0):
+        return np.full_like(periods, np.nan, dtype=float)
 
-    return np.asarray(gv_model, dtype=float)
+    try:
+        disp = GroupDispersion(H, vp, vs, rho)
+        gv_model = disp(periods, mode=mode, wave=wave).velocity
+    except Exception:
+        return np.full_like(periods, np.nan, dtype=float)
+
+    gv_model = np.asarray(gv_model, dtype=float)
+    if gv_model.shape != periods.shape or np.any(~np.isfinite(gv_model)):
+        return np.full_like(periods, np.nan, dtype=float)
+
+    return gv_model
 
 
 def plot_posterior_group_velocity_density(
@@ -786,7 +828,11 @@ def plot_posterior_group_velocity_density(
     vpvsr=1.8, wave="rayleigh", mode_idx=0,
     n_vel=200, vel_pad_frac=0.05,
     figsize=(7, 5), cmap="viridis",
-    show_colorbar=True
+    show_colorbar=True,
+    normalize_each_period=False,
+    min_bin_count=2,
+    min_bin_fraction=0.01,
+    show=True,
 ):
     """
     Plot posterior group-velocity distributions in one panel:
@@ -808,6 +854,12 @@ def plot_posterior_group_velocity_density(
             vpvsr=vpvsr, wave=wave, mode=mode_idx
         )
 
+    valid_rows = np.all(np.isfinite(gv_all), axis=1)
+    gv_all = gv_all[valid_rows]
+    if gv_all.size == 0:
+        raise ValueError("No finite group-velocity curves could be computed from the ensemble.")
+    n_models = gv_all.shape[0]
+
     # common velocity grid
     gv_min = np.min(gv_all)
     gv_max = np.max(gv_all)
@@ -821,12 +873,17 @@ def plot_posterior_group_velocity_density(
     Z = np.zeros((n_vel, n_per), dtype=float)
 
     for iper in range(n_per):
-        hist, _ = np.histogram(gv_all[:, iper], bins=vel_edges, density=False)
-        hist = hist.astype(float)
+        hist_counts, _ = np.histogram(gv_all[:, iper], bins=vel_edges, density=False)
+        hist_counts = hist_counts.astype(float)
+        support_floor = max(float(min_bin_count), np.ceil(float(min_bin_fraction) * n_models))
+        hist_counts[hist_counts < support_floor] = 0.0
+        hist = hist_counts.copy()
 
-        # normalize each period slice by its own maximum
-        if np.max(hist) > 0:
-            hist /= np.max(hist)
+        if normalize_each_period:
+            if np.max(hist) > 0:
+                hist /= np.max(hist)
+        else:
+            hist /= n_models
 
         Z[:, iper] = hist
 
@@ -842,7 +899,8 @@ def plot_posterior_group_velocity_density(
 
     fig, ax = plt.subplots(figsize=figsize)
 
-    h = ax.pcolormesh(per_edges, vel_edges, Z, shading="auto", cmap=cmap, vmin=0, vmax=1)
+    vmax = 1 if normalize_each_period else np.nanmax(Z)
+    h = ax.pcolormesh(per_edges, vel_edges, Z, shading="auto", cmap=cmap, vmin=0, vmax=vmax)
 
     # overlay observed / true curve
     if gv_true is not None:
@@ -858,7 +916,9 @@ def plot_posterior_group_velocity_density(
 
     if show_colorbar:
         cbar = plt.colorbar(h, ax=ax)
-        cbar.set_label("Normalized posterior density")
+        label = "Normalized posterior density" if normalize_each_period else "Posterior fraction"
+        cbar.set_label(label)
 
     plt.tight_layout()
-    plt.show()
+    if show:
+        plt.show()

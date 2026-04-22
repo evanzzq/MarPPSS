@@ -5,6 +5,66 @@ from marppss.model import Model
 from marppss.forward import create_D_from_model, create_arrivals_from_model
 from marppss.util import check_model
 
+
+def _default_fixed_vpvs(bookkeeping):
+    assumptions = getattr(bookkeeping, "assumptions", None) or {}
+    return float(assumptions.get("fixed_vpvs", 1.8))
+
+
+def _get_travel_time_inputs(bookkeeping):
+    travel_times = getattr(bookkeeping, "travel_times", None) or {}
+    if travel_times:
+        pp = travel_times.get("PP", {})
+        ss = travel_times.get("SS", {})
+        arr_PP_obs = np.asarray(pp.get("times", []), dtype=float)
+        arr_SS_obs = np.asarray(ss.get("times", []), dtype=float)
+        arr_PP_unc = np.asarray(pp.get("uncertainties", np.repeat(0.1, len(arr_PP_obs))), dtype=float)
+        arr_SS_unc = np.asarray(ss.get("uncertainties", np.repeat(0.1, len(arr_SS_obs))), dtype=float)
+        return arr_PP_obs, arr_SS_obs, arr_PP_unc, arr_SS_unc
+
+    arr_PP_obs = np.array([5.31, 10.93, 17.34])
+    arr_SS_obs = np.array([18.0, 40.0, 63.0])
+    arr_PP_unc = np.repeat(0.1, len(arr_PP_obs))
+    arr_SS_unc = np.repeat(0.1, len(arr_SS_obs))
+    return arr_PP_obs, arr_SS_obs, arr_PP_unc, arr_SS_unc
+
+
+def _get_group_velocity_inputs(bookkeeping):
+    gv = getattr(bookkeeping, "group_velocity", None) or {}
+    if gv:
+        periods = np.asarray(gv["periods"], dtype=float)
+        gv_obs = np.asarray(gv["values"], dtype=float)
+        uncertainties = gv.get("uncertainties", 0.2)
+        if np.isscalar(uncertainties):
+            gv_unc = np.full_like(periods, float(uncertainties))
+        else:
+            gv_unc = np.asarray(uncertainties, dtype=float)
+        return (
+            periods,
+            gv_obs,
+            gv_unc,
+            gv.get("wave", "rayleigh"),
+            int(gv.get("mode", 0)),
+            float(gv.get("vpvsr", _default_fixed_vpvs(bookkeeping))),
+        )
+
+    periods = np.array([2.5, 2.6, 2.7, 2.9, 3.0, 3.2, 3.4, 3.6, 3.8, 4.0,
+                        4.2, 4.4, 4.6, 4.8, 5.0, 5.5, 6.0, 6.5, 7.0, 7.5,
+                        8.0, 8.5, 9.0, 9.5])
+    gv_obs = np.array([1.45520, 1.45430, 1.45470, 1.48910, 1.52890, 1.66900,
+                       1.76820, 1.95960, 2.38430, 2.59290, 2.73800, 2.81960,
+                       2.91720, 3.02230, 3.12000, 3.28570, 3.38680, 3.42470,
+                       3.44760, 3.46300, 3.46350, 3.44390, 3.40360, 3.36620])
+    gv_unc = np.full_like(periods, 0.2)
+    return periods, gv_obs, gv_unc, "love", 0, _default_fixed_vpvs(bookkeeping)
+
+
+def _get_avg_vs_inputs(bookkeeping):
+    avg_vs = getattr(bookkeeping, "avg_vs", None) or {}
+    if avg_vs:
+        return float(avg_vs["value"]), float(avg_vs.get("uncertainty", 0.1))
+    return 3.077, 0.1
+
 def calc_like_prob(P, D, model, prior, bookkeeping, CDinv=None):
     """
     Calculate likelihood probability and associated matrices.
@@ -123,21 +183,16 @@ def calc_like_prob_joint(P_PP, P_SS, D_PP, D_SS,
 def calc_like_prob_travel_time(model, bookkeeping):
     import numpy as np
 
-    # -----------------------------
-    # hard-coded observed travel times
-    # edit based on real data
-    # -----------------------------
-    arr_PP_obs = np.array([5.31, 10.93, 17.34])
-    arr_SS_obs = np.array([18.0, 40.0, 63.0]) # NOT EDITTED!!!
-
-    arr_PP_unc = np.repeat(0.05, len(arr_PP_obs))
-    arr_SS_unc = np.repeat(0.2, len(arr_SS_obs))
+    BAD = -1e100
+    arr_PP_obs, arr_SS_obs, arr_PP_unc, arr_SS_unc = _get_travel_time_inputs(bookkeeping)
 
     # -----------------------------
     # compute model travel times
     # -----------------------------
     if bookkeeping.mode == 1:
         arr_PP_model = create_arrivals_from_model(model, bookkeeping)
+        if arr_PP_model.shape != arr_PP_obs.shape:
+            return BAD
 
         diff_PP = arr_PP_model - arr_PP_obs
 
@@ -147,6 +202,8 @@ def calc_like_prob_travel_time(model, bookkeeping):
 
     elif bookkeeping.mode == 2:
         arr_SS_model = create_arrivals_from_model(model, bookkeeping)
+        if arr_SS_model.shape != arr_SS_obs.shape:
+            return BAD
 
         diff_SS = arr_SS_model - arr_SS_obs
 
@@ -156,6 +213,8 @@ def calc_like_prob_travel_time(model, bookkeeping):
 
     elif bookkeeping.mode == 3:
         arr_PP_model, arr_SS_model = create_arrivals_from_model(model, bookkeeping)
+        if arr_PP_model.shape != arr_PP_obs.shape or arr_SS_model.shape != arr_SS_obs.shape:
+            return BAD
 
         diff_PP = arr_PP_model - arr_PP_obs
         diff_SS = arr_SS_model - arr_SS_obs
@@ -173,21 +232,12 @@ def calc_like_prob_gv(model, bookkeeping):
 
     BAD = -1e100
 
-    # log periods
-    periods = np.geomspace(1.0, 60.0, 30)
-    gv_obs = np.array([
-        1.72831393, 1.72831515, 1.72831393, 1.72831515, 1.72826632, 1.72826998,
-        1.72813817, 1.72766238, 1.72625655, 1.72298695, 1.71618461, 1.70369458,
-        1.68260864, 1.64959752, 1.60149205, 1.53709264, 1.4621401,  1.39993361,
-        1.39617903, 1.47724876, 1.60899818, 1.7582251,  1.91592707, 2.07528614,
-        2.24488849, 2.4438849,  2.66871742, 2.88931588, 3.07926004, 3.23077445
-    ])
-    gv_unc = np.repeat(0.2, 30)
+    periods, gv_obs, gv_unc, wave, mode_idx, default_vpvsr = _get_group_velocity_inputs(bookkeeping)
 
     if bookkeeping.fitrho or bookkeeping.mode == 3:
         vpvsr = np.asarray(model.rho, dtype=float)
     else:
-        vpvsr = 1.8
+        vpvsr = default_vpvsr
 
     # convert interface depths to layer thicknesses
     H_interfaces = np.asarray(model.H, dtype=float)
@@ -238,11 +288,13 @@ def calc_like_prob_gv(model, bookkeeping):
     # ---------- disba call ----------
     try:
         disp = GroupDispersion(H, vp, vs, rho)
-        gv_model = disp(periods, mode=0, wave="rayleigh").velocity
+        gv_model = disp(periods, mode=mode_idx, wave=wave).velocity
     except Exception:
         return BAD
 
     if np.any(~np.isfinite(gv_model)):
+        return BAD
+    if len(gv_model) != len(periods):
         return BAD
 
     diff_gv = gv_model - gv_obs
@@ -254,16 +306,13 @@ def calc_like_prob_gv(model, bookkeeping):
 
 def calc_like_prob_avg_vs(model, bookkeeping):
 
-    # define avg vs reference and uncertainty
-    # edit these based on data
-    avg_vs_ref = 3.077
-    avg_vs_unc = 0.1
+    avg_vs_ref, avg_vs_unc = _get_avg_vs_inputs(bookkeeping)
     
     # define vpvsr
     if bookkeeping.fitrho or bookkeeping.mode == 3:
         vpvsr = model.rho
     else:
-        vpvsr = 1.8
+        vpvsr = _default_fixed_vpvs(bookkeeping)
 
     # define vs
     if bookkeeping.mode == 1: 
@@ -579,40 +628,48 @@ def rjmcmc_run(P, D, prior, bookkeeping, saveDir, CDinv=None):
     nSaveModels = bookkeeping.nSaveModels
     save_interval = (totalSteps - burnInSteps) // nSaveModels
     actionsPerStep = bookkeeping.actionsPerStep
+    fit_waveform = getattr(bookkeeping, "fitWaveform", not bookkeeping.fitTT)
+    fit_travel_time = bookkeeping.fitTT
+    fixed_nlayer = getattr(bookkeeping, "fixedNlayer", None)
 
     # Start from an empty model
-    if not bookkeeping.fitTT: 
-        model = Model.create_initial(prior=prior)
+    if fixed_nlayer is not None:
+        model = Model.create_initial(prior=prior, Nlayer=int(fixed_nlayer))
     else:
-        model = Model.create_initial(prior=prior, Nlayer=3) # HARD CODED!!! Nlayer=3
+        model = Model.create_initial(prior=prior)
 
     # Initial likelihood
     logL_trace = []
 
-    if not bookkeeping.fitTT:
+    logL_PP_trace, logL_SS_trace = [], []
+
+    if fit_waveform:
         if bookkeeping.mode in (1, 2):
             logL = calc_like_prob(P, D, model, prior, bookkeeping, CDinv=CDinv)
         elif bookkeeping.mode == 3:
-            logL_PP_trace, logL_SS_trace = [], []
             logL, logL_PP, logL_SS = calc_like_prob_joint(
                 P_PP, P_SS, D_PP, D_SS, 
                 model, prior, bookkeeping, CDinv_PP=CDinv_PP, CDinv_SS=CDinv_SS)
             logL_PP_trace.append(logL_PP)
             logL_SS_trace.append(logL_SS)
-    else:
+    elif fit_travel_time:
         logL = calc_like_prob_travel_time(model, bookkeeping)
-        # logL = 0 # testing gv only!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    else:
+        logL = 0.0
 
     # fitgv and fitavgvs - only max 1 should be turned on
     if bookkeeping.fitgv: 
         logL_gv_trace = []
-        logL_wf_trace = []
-        logL_wf_trace.append(logL)
+        logL_body_trace = []
+        logL_body_trace.append(logL)
         logL_gv = calc_like_prob_gv(model, bookkeeping)
         logL_gv_trace.append(logL_gv)
         logL += logL_gv
     if bookkeeping.fitavgvs:
         logL_avg_vs_trace = []
+        if not bookkeeping.fitgv:
+            logL_body_trace = []
+            logL_body_trace.append(logL)
         logL_avg_vs = calc_like_prob_avg_vs(model, bookkeeping)
         logL_avg_vs_trace.append(logL_avg_vs)
         logL += logL_avg_vs
@@ -625,14 +682,15 @@ def rjmcmc_run(P, D, prior, bookkeeping, saveDir, CDinv=None):
     ensemble = []
 
     # Action pool
-    actionPool = [2,10] # H, v # birth/death!!!!
-    if not bookkeeping.fitTT: # fit full waveform
+    actionPool = [2, 10] # H, v
+    if fixed_nlayer is None and prior.maxN > 1:
+        actionPool = np.append(actionPool, [0, 1]) # birth, death
+    if fit_waveform:
         actionPool = np.append(actionPool, [3]) # w
         if bookkeeping.mode == 3: actionPool = np.append(actionPool, [4]) # w2
         if bookkeeping.fitLoge:
             if bookkeeping.mode in [1, 2]: actionPool = np.append(actionPool, [5]) # loge
             if bookkeeping.mode == 3: actionPool = np.append(actionPool, [5,6]) # loge and loge2
-        if prior.maxN > 1: actionPool = np.append(actionPool, [0,1]) # birth, death
     if bookkeeping.mode == 3 or ((bookkeeping.fitgv or bookkeeping.fitavgvs) and bookkeeping.fitrho): actionPool = np.append(actionPool, [11]) # rho
     
     # if bookkeeping.fitgv: actionPool = np.append(actionPool, [7]) # loge_gv # commented out so loge_gv === 0
@@ -667,22 +725,21 @@ def rjmcmc_run(P, D, prior, bookkeeping, saveDir, CDinv=None):
                 model_new, _ = update_loge_TT(model_new, prior)
             elif action == 10:
                 model_new, _ = update_v(model_new, prior, bookkeeping.rayp)
-            elif action == 101:
+            elif action == 11:
                 model_new, _ = update_rho(model_new, prior, bookkeeping.rayp)
 
         # Compute likelihood
-        # CASE 1: FIT FULL WAVEFORM
-        if not bookkeeping.fitTT:
+        if fit_waveform:
             if bookkeeping.mode in (1, 2):
                 new_logL = calc_like_prob(P, D, model_new, prior, bookkeeping, CDinv=CDinv)
             elif bookkeeping.mode == 3:
                 new_logL, new_logL_PP, new_logL_SS = calc_like_prob_joint(
                     P_PP, P_SS, D_PP, D_SS, 
                     model_new, prior, bookkeeping, CDinv_PP=CDinv_PP, CDinv_SS=CDinv_SS)
-        # CASE 2: FIT ONLY TRAVEL TIME
-        else:
+        elif fit_travel_time:
             new_logL = calc_like_prob_travel_time(model_new, bookkeeping)
-            # new_logL = 0 # testing gv only!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        else:
+            new_logL = 0.0
         # Then add fitgv and fitavgvs as needed
         if bookkeeping.fitgv: 
             new_logL_gv = calc_like_prob_gv(model_new, bookkeeping)
@@ -692,10 +749,11 @@ def rjmcmc_run(P, D, prior, bookkeeping, saveDir, CDinv=None):
             new_logL += new_logL_avg_vs
 
         # Acceptance probability
-        log_accept_ratio = ((new_logL - logL) 
-                            + n_len * ((model.loge - model_new.loge) + (model.loge2 - model_new.loge2)) 
-                            + 2 * (model.loge_gv - model_new.loge_gv)
-                            + (model.loge_avg_vs - model_new.loge_avg_vs))
+        log_accept_ratio = (new_logL - logL)
+        if fit_waveform:
+            log_accept_ratio += n_len * ((model.loge - model_new.loge) + (model.loge2 - model_new.loge2))
+        log_accept_ratio += 2 * (model.loge_gv - model_new.loge_gv)
+        log_accept_ratio += (model.loge_avg_vs - model_new.loge_avg_vs)
 
         if np.log(np.random.rand()) < log_accept_ratio:
             model = model_new
@@ -714,10 +772,10 @@ def rjmcmc_run(P, D, prior, bookkeeping, saveDir, CDinv=None):
             logL_SS_trace.append(logL_SS)
         if bookkeeping.fitgv:
             logL_gv_trace.append(logL_gv)
-            logL_wf_trace.append(logL - logL_gv)
+            logL_body_trace.append(logL - logL_gv)
         if bookkeeping.fitavgvs:
             logL_avg_vs_trace.append(logL_avg_vs)
-            logL_wf_trace.append(logL - logL_avg_vs)
+            logL_body_trace.append(logL - logL_avg_vs)
 
         # Save only selected models after burn-in
         if iStep >= burnInSteps and (iStep - burnInSteps) % save_interval == 0:
@@ -739,10 +797,10 @@ def rjmcmc_run(P, D, prior, bookkeeping, saveDir, CDinv=None):
             if bookkeeping.mode in (1,2):
                 if bookkeeping.fitgv:
                     fig, ax = plt.subplots()
-                    ax.plot(logL_wf_trace, 'k-', label="waveform")
+                    ax.plot(logL_body_trace, 'k-', label="body-wave")
                     ax.plot(logL_gv_trace, 'r-', label="group vel.")
-                    ymin = min(logL_wf_trace[-1], logL_gv_trace[-1]) - 0.1 * abs(logL_wf_trace[-1] - logL_gv_trace[-1])
-                    ymax = max(logL_wf_trace[-1], logL_gv_trace[-1]) + 0.1 * abs(logL_wf_trace[-1] - logL_gv_trace[-1])
+                    ymin = min(logL_body_trace[-1], logL_gv_trace[-1]) - 0.1 * abs(logL_body_trace[-1] - logL_gv_trace[-1])
+                    ymax = max(logL_body_trace[-1], logL_gv_trace[-1]) + 0.1 * abs(logL_body_trace[-1] - logL_gv_trace[-1])
                     ax.set_ylim(ymin, ymax)
                     ax.set_xscale('log')
                     ax.set_xlabel("Step")
@@ -752,10 +810,10 @@ def rjmcmc_run(P, D, prior, bookkeeping, saveDir, CDinv=None):
                     plt.close(fig)
                 if bookkeeping.fitavgvs:
                     fig, ax = plt.subplots()
-                    ax.plot(logL_wf_trace, 'k-', label="waveform")
-                    ax.plot(logL_gv_trace, 'r-', label="avg vs")
-                    ymin = min(logL_wf_trace[-1], logL_avg_vs_trace[-1]) - 0.1 * abs(logL_wf_trace[-1] - logL_avg_vs_trace[-1])
-                    ymax = max(logL_wf_trace[-1], logL_avg_vs_trace[-1]) + 0.1 * abs(logL_wf_trace[-1] - logL_avg_vs_trace[-1])
+                    ax.plot(logL_body_trace, 'k-', label="body-wave")
+                    ax.plot(logL_avg_vs_trace, 'r-', label="avg vs")
+                    ymin = min(logL_body_trace[-1], logL_avg_vs_trace[-1]) - 0.1 * abs(logL_body_trace[-1] - logL_avg_vs_trace[-1])
+                    ymax = max(logL_body_trace[-1], logL_avg_vs_trace[-1]) + 0.1 * abs(logL_body_trace[-1] - logL_avg_vs_trace[-1])
                     ax.set_ylim(ymin, ymax)
                     ax.set_xscale('log')
                     ax.set_xlabel("Step")
@@ -765,7 +823,7 @@ def rjmcmc_run(P, D, prior, bookkeeping, saveDir, CDinv=None):
                     plt.close(fig)
 
             # Save PP/SS plots for mode 3
-            if bookkeeping.mode == 3:
+            if bookkeeping.mode == 3 and fit_waveform:
                 fig, ax = plt.subplots()
                 ax.plot(logL_PP_trace, 'b-', label="PP")
                 ax.plot(logL_SS_trace, 'r-', label="SS")

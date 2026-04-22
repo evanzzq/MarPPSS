@@ -176,19 +176,53 @@ def prepare_experiment(exp_vars):
         rhoRange=tuple(exp_vars["rhoRange"])
     )
 
+    fixed_nlayer = exp_vars.get("fixedNlayer")
+    if fixed_nlayer is None and exp_vars["fitTT"]:
+        travel_times = exp_vars.get("travel_times") or {}
+        pp_times = np.asarray((travel_times.get("PP") or {}).get("times", []), dtype=float)
+        ss_times = np.asarray((travel_times.get("SS") or {}).get("times", []), dtype=float)
+
+        if mode == 1:
+            if pp_times.size == 0:
+                raise ValueError("PP travel-time inversion requires PP travel_times.")
+            fixed_nlayer = int(pp_times.size)
+        elif mode == 2:
+            if ss_times.size == 0:
+                raise ValueError("SS travel-time inversion requires SS travel_times.")
+            fixed_nlayer = int(ss_times.size)
+        elif mode == 3:
+            if pp_times.size == 0 or ss_times.size == 0:
+                raise ValueError("Joint travel-time inversion requires both PP and SS travel_times.")
+            if pp_times.size != ss_times.size:
+                raise ValueError("Joint travel-time inversion requires the same number of PP and SS picks.")
+            fixed_nlayer = int(pp_times.size)
+
     # --- Bookkeeping ---
     bookkeeping = Bookkeeping(
         mode=exp_vars["mode"],
         rayp=exp_vars["rayp"],
         fitRange=exp_vars["fitRange"],
+        fitWaveform=exp_vars["fitWaveform"],
         fitLoge=exp_vars["fitLoge"],
         fitTT=exp_vars["fitTT"],
         fitgv=exp_vars["fitgv"],
+        fitavgvs=exp_vars["fitavgvs"],
         fitrho=exp_vars["fitrho"],
         totalSteps=exp_vars["totalSteps"],
         burnInSteps=exp_vars["burnInSteps"],
         nSaveModels=exp_vars["nSaveModels"],
-        actionsPerStep=exp_vars["actionsPerStep"]
+        actionsPerStep=exp_vars["actionsPerStep"],
+        fixedNlayer=fixed_nlayer,
+        travel_times=exp_vars.get("travel_times"),
+        group_velocity=exp_vars.get("group_velocity"),
+        avg_vs=exp_vars.get("avg_vs"),
+        assumptions=exp_vars.get("assumptions"),
+        reference_model=exp_vars.get("reference_model"),
+        metadata={
+            "event_name": exp_vars.get("event_name"),
+            "experiment_name": exp_vars.get("experiment_name"),
+            "config_path": exp_vars.get("config_path"),
+        },
     )
 
     # --- Save ---
@@ -201,6 +235,7 @@ def prepare_experiment(exp_vars):
 
     exp_vars["prior"] = prior
     exp_vars["bookkeeping"] = bookkeeping
+    exp_vars["fixedNlayer"] = fixed_nlayer
 
     return exp_vars
 

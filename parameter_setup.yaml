@@ -1,7 +1,7 @@
 common:
 
-  # basedir: "/Users/evanzhang/zzq@umd.edu - Google Drive/My Drive/Research"
-  basedir: "H:/My Drive/Research"
+  basedir: "/Users/evanzhang/zzq@umd.edu - Google Drive/My Drive/Research"
+  # basedir: "H:/My Drive/Research"
 
   datadir_subpaths:
     - "SharpSSPy"
@@ -60,7 +60,29 @@ common:
 
 experiments:
 
-  - evname: "S0976asdr_1877" # name of event in raw data dir
+  # - evname: "S0976asdr_1883" # name of event in raw data dir
+  #   dtype: "DISP"
+  #   src_sigma: 3.5
+  #   fitTT: true
+  #   fitgv: true
+  #   fitLoge: false
+  #   fitrho: true
+  #   fitRange: [0,30,0,40]
+  #   vRange: [3.0, 8.0]
+
+  #   rayp: 0.0862
+
+  #   totalSteps: 1000000
+  #   burnInSteps: 600000
+  #   nSaveModels: 200
+  #   actionsPerStep: 1
+  #   num_chains: 8
+
+  #   mode: 1                   # 1=PP, 2=SS, 3=joint
+  #   maxN: 50
+  #   runname: "run2_8c_N50_joint_PPTT_gv_1_60_30_unc_0.1_0.1"
+
+  - evname: "S0976asdr_1883" # name of event in raw data dir
     dtype: "DISP"
     src_sigma: 3.5
     fitTT: true
@@ -68,7 +90,12 @@ experiments:
     fitLoge: false
     fitrho: true
     fitRange: [0,30,0,40]
-    vRange: [3.0, 8.0]
+
+    HRange: [0.1, 20.0]
+    wRange: [0.5, 1.5]
+    vRange: [0.5, 4.0]
+    logeRange: [0., 10.]
+    rhoRange: [1.5, 2.2]
 
     rayp: 0.0862
 
@@ -76,8 +103,8 @@ experiments:
     burnInSteps: 600000
     nSaveModels: 200
     actionsPerStep: 1
-    num_chains: 96
+    num_chains: 8
 
-    mode: 1                   # 1=PP, 2=SS, 3=joint
+    mode: 2                  # 1=PP, 2=SS, 3=joint
     maxN: 50
-    runname: "run9_96c_N50_joint_PPTT_gv_1_60_30_unc_0.2_0.2"
+    runname: "run_VedCourse_gvonly_unc_0.2"

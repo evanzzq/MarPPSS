@@ -5,16 +5,16 @@ import matplotlib.pyplot as plt
 from marppss.visualization import plot_velocity_ensemble, plot_posterior_num_phases, plot_predicted_vs_input, plot_posterior_error_params, plot_posterior_group_velocity_density, plot_velocity_density_image
 
 # ==== Config ====
-filedir = "H:/My Drive/Research/MarPPSS"
-# filedir = "/Users/evanzhang/zzq@umd.edu - Google Drive/My Drive/Research/MarPPSS"
+# filedir = "H:/My Drive/Research/MarPPSS"
+filedir = "/Users/evanzhang/zzq@umd.edu - Google Drive/My Drive/Research/MarPPSS"
 
 # ---- User-defined experiment/run ----
-expname = "S0976asdr_1877_src_3.5_s_PP"   # folder under run/
-runname = "run9_8c_N50_joint_PPTT_gv_1_60_30_unc_0.2_0.2"                     # subfolder under that
+expname = "S0976asdr_1883_src_3.5_s_SS"   # folder under run/
+runname = "run_VedCourse_gvonly_unc_0.2"                     # subfolder under that
 
 # ---- Explicit data dirs (user-specified) ----
-PPdir = "S0976asdr_1877_src_3.5_s_PP"        # folder under data/
-SSdir = "S0976asdr_1877_src_3.5_s_SS"        # folder under data/
+PPdir = "S0976asdr_1883_src_3.5_s_PP"        # folder under data/
+SSdir = "S0976asdr_1883_src_3.5_s_SS"        # folder under data/
 
 PP_dir = os.path.join(filedir, "data", PPdir)
 SS_dir = os.path.join(filedir, "data", SSdir)
@@ -165,10 +165,12 @@ else:
 # -----------------------------------------------------------
 
 
-H_true=np.array([10, 24, 48])
-v_true=np.array([3.8, 4.5, 6.22, 7.67])
-# v_true=np.array([1.85, 2.8, 3.75, 4.33])
-rho_true=np.array([2.054, 1.607, 1.659, 1.771])
+# H_true=np.array([10, 24, 48])
+# v_true=np.array([3.8, 4.5, 6.22, 7.67])
+# # v_true=np.array([1.85, 2.8, 3.75, 4.33])
+# rho_true=np.array([2.054, 1.607, 1.659, 1.771])
+
+H_true = None; v_true = None; rho_true = None
 
 plot_velocity_ensemble(ensemble_all, bookkeeping, prior.HRange, 
                        H_true=H_true, v_true=v_true, rho_true=rho_true)
@@ -183,15 +185,25 @@ plot_posterior_num_phases(ensemble_all)
 # periods = np.array([18.9, 28.86])
 # gv_obs  = np.array([2.726, 2.829])
 
-# reflectivity synthetics
-periods = np.geomspace(1.0, 60.0, 30)
-gv_obs = np.array([
-    1.72831393, 1.72831515, 1.72831393, 1.72831515, 1.72826632, 1.72826998,
-    1.72813817, 1.72766238, 1.72625655, 1.72298695, 1.71618461, 1.70369458,
-    1.68260864, 1.64959752, 1.60149205, 1.53709264, 1.4621401,  1.39993361,
-    1.39617903, 1.47724876, 1.60899818, 1.7582251,  1.91592707, 2.07528614,
-    2.24488849, 2.4438849,  2.66871742, 2.88931588, 3.07926004, 3.23077445
-])
+# # reflectivity synthetics
+# periods = np.geomspace(1.0, 60.0, 30)
+# gv_obs = np.array([
+#     1.72831393, 1.72831515, 1.72831393, 1.72831515, 1.72826632, 1.72826998,
+#     1.72813817, 1.72766238, 1.72625655, 1.72298695, 1.71618461, 1.70369458,
+#     1.68260864, 1.64959752, 1.60149205, 1.53709264, 1.4621401,  1.39993361,
+#     1.39617903, 1.47724876, 1.60899818, 1.7582251,  1.91592707, 2.07528614,
+#     2.24488849, 2.4438849,  2.66871742, 2.88931588, 3.07926004, 3.23077445
+# ])
+
+# Ved course
+periods = np.array([2.5, 2.6, 2.7, 2.9, 3.0, 3.2, 3.4, 3.6, 3.8, 4.0,
+    4.2, 4.4, 4.6, 4.8, 5.0, 5.5, 6.0, 6.5, 7.0, 7.5,
+    8.0, 8.5, 9.0, 9.5])
+gv_obs = np.array([1.45520, 1.45430, 1.45470, 1.48910, 1.52890, 1.66900,
+1.76820, 1.95960, 2.38430, 2.59290, 2.73800, 2.81960,
+2.91720, 3.02230, 3.12000, 3.28570, 3.38680, 3.42470,
+3.44760, 3.46300, 3.46350, 3.44390, 3.40360, 3.36620])
+
 if bookkeeping.fitgv:
     plot_posterior_group_velocity_density(
         ensemble,
@@ -199,7 +211,7 @@ if bookkeeping.fitgv:
         periods,
         gv_true=gv_obs,
         vpvsr=1.8,
-        wave="rayleigh",
+        wave="love",
         mode_idx=0,   # disba fundamental mode
         n_vel=200
     )

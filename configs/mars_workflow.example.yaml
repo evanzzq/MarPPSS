@@ -1,0 +1,250 @@
+paths:
+  data_root: "${MARPPSS_DATA_DIR}"
+  datadir_subpaths:
+    - "SharpSSPy"
+    - "misc"
+  outdir_subpaths:
+    - "MarPPSS"
+
+defaults:
+  preprocessing:
+    cutwin: [-60, 60]
+    rotated: true
+  prior:
+    HRange: [1.0, 60.0]
+    wRange: [0.5, 1.5]
+    vRange: [1.0, 4.0]
+    logeRange: [0.0, 10.0]
+    rhoRange: [1.5, 2.2]
+    maxN: 1
+    stdPP: 0.04
+    stdSS: 0.04
+  inversion:
+    useCD: false
+    fitWaveform: true
+    fitLoge: true
+    fitTT: false
+    fitgv: false
+    fitavgvs: false
+    fitrho: false
+    fitRange: null
+  runtime:
+    totalSteps: 1000000
+    burnInSteps: 800000
+    nSaveModels: 200
+    actionsPerStep: 1
+    num_chains: 8
+  assumptions:
+    fixed_vpvs: 1.8
+
+events:
+  S0976asdr_1883:
+    evname: "S0976asdr_1883"
+    dtype: "DISP"
+    arrivals:
+      PP: "2021-08-25T03:49:13.000"
+      SS: "2021-08-25T04:03:16.000"
+    rayp:
+      PP: 0.08181493934
+      SS: 0.1712366396
+    preprocessing:
+      PPfreq: [0.1666666667, 0.3571428571]
+      SSfreq: [0.1666666667, 0.3571428571]
+      src_sigma: 3.5
+    reference_model:
+      H: [10.0, 24.0, 48.0]
+      vp: [3.8, 4.5, 6.22, 7.67]
+      vs: [1.85, 2.8, 3.75, 4.33]
+    constraints:
+      travel_times:
+        PP:
+          times: [5.31, 10.93, 17.34]
+          uncertainties: [0.1, 0.1, 0.1]
+        SS:
+          times: [18.0, 40.0, 63.0]
+          uncertainties: [0.1, 0.1, 0.1]
+
+experiments:
+  s0976asdr_1883_gv_1to40_20:
+    event: S0976asdr_1883
+    mode: ss
+    runname: "run_gv_1to40_20"
+    fitWaveform: false
+    fitTT: false
+    fitgv: true
+    fitrho: true
+    fitLoge: false
+    fitRange: [0, 30, 0, 40]
+    HRange: [0.1, 60.0]
+    vRange: [0.5, 5.0]
+    maxN: 50
+    constraints:
+      group_velocity:
+        periods: [1.0, 1.21428, 1.474477, 1.790428, 2.174081, 2.639944, 3.205632, 3.892536, 4.72663, 5.739453, 6.969305, 8.46269, 10.276077, 12.478038, 15.151836, 18.398576, 22.341028, 27.12827, 32.941324, 40.0]
+        values: [1.728314,1.728315,1.728314,1.728315,1.728226,1.727705,1.725368,1.718332,1.700893,1.664561,1.597780,1.489567,1.353111,1.314530,1.523923,1.832597,2.145771,2.426011,2.708833,2.987268]
+        uncertainties: 0.2
+        wave: rayleigh
+        mode: 0
+
+  s0976asdr_1883_pp_tt_gv_1to40_20:
+    event: S0976asdr_1883
+    mode: pp
+    runname: "run_pp_tt_gv_1to40_20"
+    fitWaveform: false
+    fitTT: true
+    fitgv: true
+    fitrho: true
+    fitLoge: false
+    fitRange: [0, 30, 0, 40]
+    HRange: [0.1, 20.0]
+    vRange: [0.5, 4.0]
+    maxN: 50
+    constraints:
+      travel_times:
+        PP:
+          times: [5.31, 10.93, 17.34]
+          uncertainties: [0.1, 0.1, 0.1]
+      group_velocity:
+        periods: [1.0, 1.21428, 1.474477, 1.790428, 2.174081, 2.639944, 3.205632, 3.892536, 4.72663, 5.739453, 6.969305, 8.46269, 10.276077, 12.478038, 15.151836, 18.398576, 22.341028, 27.12827, 32.941324, 40.0]
+        values: [1.728314,1.728315,1.728314,1.728315,1.728226,1.727705,1.725368,1.718332,1.700893,1.664561,1.597780,1.489567,1.353111,1.314530,1.523923,1.832597,2.145771,2.426011,2.708833,2.987268]
+        uncertainties: 0.2
+        wave: rayleigh
+        mode: 0
+
+  s0976asdr_1883_gv_15to35_5:
+    event: S0976asdr_1883
+    mode: ss
+    runname: "run_gv_15to35_5"
+    fitWaveform: false
+    fitTT: false
+    fitgv: true
+    fitrho: true
+    fitLoge: false
+    fitRange: [0, 30, 0, 40]
+    HRange: [0.1, 60.0]
+    vRange: [0.5, 5.0]
+    maxN: 50
+    constraints:
+      group_velocity:
+        periods: [15.0, 18.538964, 22.912878, 28.318735, 35.0]
+        values: [1.509188,1.845235,2.183771,2.487190,2.798560]
+        uncertainties: 0.2
+        wave: rayleigh
+        mode: 0
+
+  s0976asdr_1883_pp_tt_gv_15to35_5:
+    event: S0976asdr_1883
+    mode: pp
+    runname: "run_pp_tt_gv_15to35_5"
+    fitWaveform: false
+    fitTT: true
+    fitgv: true
+    fitrho: true
+    fitLoge: false
+    fitRange: [0, 30, 0, 40]
+    HRange: [0.1, 20.0]
+    vRange: [0.5, 4.0]
+    maxN: 50
+    constraints:
+      travel_times:
+        PP:
+          times: [5.31, 10.93, 17.34]
+          uncertainties: [0.1, 0.1, 0.1]
+      group_velocity:
+        periods: [15.0, 18.538964, 22.912878, 28.318735, 35.0]
+        values: [1.509188,1.845235,2.183771,2.487190,2.798560]
+        uncertainties: 0.2
+        wave: rayleigh
+        mode: 0
+
+  s0976asdr_1883_gv_20to30_5:
+    event: S0976asdr_1883
+    mode: ss
+    runname: "run_gv_20to30_5"
+    fitWaveform: false
+    fitTT: false
+    fitgv: true
+    fitrho: true
+    fitLoge: false
+    fitRange: [0, 30, 0, 40]
+    HRange: [0.1, 60.0]
+    vRange: [0.5, 5.0]
+    maxN: 50
+    constraints:
+      group_velocity:
+        periods: [20.0, 22.133638, 24.494897, 27.10806, 30.0]
+        values: [1.970631,2.131559,2.281161,2.424926,2.570712]
+        uncertainties: 0.2
+        wave: rayleigh
+        mode: 0
+
+  s0976asdr_1883_pp_tt_gv_20to30_5:
+    event: S0976asdr_1883
+    mode: pp
+    runname: "run_pp_tt_gv_20to30_5"
+    fitWaveform: false
+    fitTT: true
+    fitgv: true
+    fitrho: true
+    fitLoge: false
+    fitRange: [0, 30, 0, 40]
+    HRange: [0.1, 20.0]
+    vRange: [0.5, 4.0]
+    maxN: 50
+    constraints:
+      travel_times:
+        PP:
+          times: [5.31, 10.93, 17.34]
+          uncertainties: [0.1, 0.1, 0.1]
+      group_velocity:
+        periods: [20.0, 22.133638, 24.494897, 27.10806, 30.0]
+        values: [1.970631,2.131559,2.281161,2.424926,2.570712]
+        uncertainties: 0.2
+        wave: rayleigh
+        mode: 0
+
+  s0976asdr_1883_gv_20_30:
+    event: S0976asdr_1883
+    mode: ss
+    runname: "run_gv_20_30"
+    fitWaveform: false
+    fitTT: false
+    fitgv: true
+    fitrho: true
+    fitLoge: false
+    fitRange: [0, 30, 0, 40]
+    HRange: [0.1, 60.0]
+    vRange: [0.5, 5.0]
+    maxN: 50
+    constraints:
+      group_velocity:
+        periods: [20.0, 30.0]
+        values: [1.970631,2.570712]
+        uncertainties: 0.2
+        wave: rayleigh
+        mode: 0
+
+  s0976asdr_1883_pp_tt_gv_20_30:
+    event: S0976asdr_1883
+    mode: pp
+    runname: "run_pp_tt_gv_20_30"
+    fitWaveform: false
+    fitTT: true
+    fitgv: true
+    fitrho: true
+    fitLoge: false
+    fitRange: [0, 30, 0, 40]
+    HRange: [0.1, 20.0]
+    vRange: [0.5, 4.0]
+    maxN: 50
+    constraints:
+      travel_times:
+        PP:
+          times: [5.31, 10.93, 17.34]
+          uncertainties: [0.1, 0.1, 0.1]
+      group_velocity:
+        periods: [20.0, 30.0]
+        values: [1.970631,2.570712]
+        uncertainties: 0.2
+        wave: rayleigh
+        mode: 0

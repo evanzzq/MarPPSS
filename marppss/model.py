@@ -6,6 +6,7 @@ class Bookkeeping:
     mode:           int # 1 - PP, 2 - SS, 3 - joint
     rayp:           np.ndarray # mode 1/2: [rayp]; mode 3: [rayp_PP, rayp_SS]
     fitRange:       np.ndarray = None # mode 1/2: [tmin, tmax]; mode 3: [tmin_PP, tmax_PP, tmin_SS, tmax_SS]
+    fitWaveform:    bool = True
     fitTT:          bool = False # fit travel time instead of full waveform
     fitLoge:        bool = True
     fitgv:          bool = False
@@ -15,6 +16,13 @@ class Bookkeeping:
     burnInSteps:    int = None
     nSaveModels:    int = 100
     actionsPerStep: int = 2
+    fixedNlayer:    int = None
+    travel_times:   dict = None
+    group_velocity: dict = None
+    avg_vs:         dict = None
+    assumptions:    dict = None
+    reference_model: dict = None
+    metadata:       dict = None
 
     def __post_init__(self):
         if self.burnInSteps is None:
