@@ -3,7 +3,19 @@ import numpy as np
 import matplotlib.pyplot as plt
 from marppss.model import Model
 from marppss.forward import create_D_from_model, create_arrivals_from_model
-from marppss.util import check_model
+from marppss.util import check_model, enforce_increasing_velocity
+from marppss.velocity import (
+    _as_slope_array,
+    all_layer_gradient_enabled,
+    disba_layers_from_model,
+    layer_bottom_velocity,
+    layer_thicknesses,
+    layer_velocity,
+    minimum_velocity_jump_fraction,
+    top_layer_gradient_enabled,
+    top_layer_velocity,
+    velocity_transition_directions,
+)
 
 
 def _default_fixed_vpvs(bookkeeping):
@@ -65,6 +77,72 @@ def _get_avg_vs_inputs(bookkeeping):
         return float(avg_vs["value"]), float(avg_vs.get("uncertainty", 0.1))
     return 3.077, 0.1
 
+
+def _enforce_increasing_velocity(bookkeeping):
+    if velocity_transition_directions(getattr(bookkeeping, "assumptions", None)) is not None:
+        return False
+    return enforce_increasing_velocity(getattr(bookkeeping, "assumptions", None))
+
+
+def _bad_loglike():
+    return -1e100
+
+
+def _finite_or_bad(value):
+    value = float(np.asarray(value).squeeze())
+    return value if np.isfinite(value) else _bad_loglike()
+
+
+def _set_finite_ylim(ax, *series, pad_frac=0.1):
+    values = []
+    for s in series:
+        arr = np.asarray(s, dtype=float).ravel()
+        values.extend(arr[np.isfinite(arr)])
+    if not values:
+        return
+
+    ymin = float(np.min(values))
+    ymax = float(np.max(values))
+    if ymin == ymax:
+        pad = max(1.0, abs(ymin) * pad_frac)
+    else:
+        pad = pad_frac * (ymax - ymin)
+    ax.set_ylim(ymin - pad, ymax + pad)
+
+
+def _ensure_save_dir(save_dir):
+    os.makedirs(save_dir, exist_ok=True)
+
+
+def _savefig_with_retry(fig, path, attempts=3, delay=0.2):
+    save_dir = os.path.dirname(path)
+    last_exc = None
+    for _ in range(int(attempts)):
+        try:
+            _ensure_save_dir(save_dir)
+            fig.savefig(path)
+            return
+        except FileNotFoundError as exc:
+            last_exc = exc
+            time.sleep(float(delay))
+    raise last_exc
+
+
+def _append_progress_with_retry(path, line, attempts=3, delay=0.2):
+    save_dir = os.path.dirname(path)
+    last_exc = None
+    for _ in range(int(attempts)):
+        try:
+            _ensure_save_dir(save_dir)
+            with open(path, "a") as f:
+                f.write(line)
+            return
+        except FileNotFoundError as exc:
+            last_exc = exc
+            time.sleep(float(delay))
+    raise last_exc
+
+
 def calc_like_prob(P, D, model, prior, bookkeeping, CDinv=None):
     """
     Calculate likelihood probability and associated matrices.
@@ -93,18 +171,19 @@ def calc_like_prob(P, D, model, prior, bookkeeping, CDinv=None):
         Diff = Diff[left:right]
     
     # Compute log likelihood
+    n_obs = len(Diff)
     if CDinv is None:
         sigma = prior.stdPP if bookkeeping.mode == 1 else prior.stdSS
         sigma *= np.exp(0.5 * model.loge)
-        logL = -0.5 * np.sum((Diff / sigma) ** 2)
+        logL = -0.5 * np.sum((Diff / sigma) ** 2) - 0.5 * n_obs * model.loge
     else:
         CDinv = np.asarray(CDinv)
         if bookkeeping.fitRange is not None: 
             CDinv = CDinv[left:right, left:right]
         CDinv *= np.exp(-model.loge)
-        logL = -0.5 * Diff @ CDinv @ Diff
+        logL = -0.5 * Diff @ CDinv @ Diff - 0.5 * n_obs * model.loge
 
-    return logL
+    return _finite_or_bad(logL)
 
 def calc_like_prob_joint(P_PP, P_SS, D_PP, D_SS, 
                          model, prior, bookkeeping, CDinv_PP=None, CDinv_SS=None):
@@ -146,6 +225,8 @@ def calc_like_prob_joint(P_PP, P_SS, D_PP, D_SS,
     
     # Compute log likelihood
     if CDinv_PP is None or CDinv_SS is None:
+        n_obs_PP = len(Diff_PP)
+        n_obs_SS = len(Diff_SS)
 
         sigmaPP = prior.stdPP
         sigmaSS = prior.stdSS
@@ -157,10 +238,12 @@ def calc_like_prob_joint(P_PP, P_SS, D_PP, D_SS,
         chi2_SS = np.sum((Diff_SS / sigmaSS) ** 2)
 
         # Normalized log-likes (per sample)
-        logL_PP = -0.5 * (chi2_PP)
-        logL_SS = -0.5 * (chi2_SS)
+        logL_PP = -0.5 * chi2_PP - 0.5 * n_obs_PP * model.loge
+        logL_SS = -0.5 * chi2_SS - 0.5 * n_obs_SS * model.loge2
 
     else:
+        n_obs_PP = len(Diff_PP)
+        n_obs_SS = len(Diff_SS)
 
         CDinv_PP = np.asarray(CDinv_PP)
         if bookkeeping.fitRange is not None: 
@@ -174,11 +257,11 @@ def calc_like_prob_joint(P_PP, P_SS, D_PP, D_SS,
         chi2_PP = np.trace(Diff_PP.T @ CDinv_PP @ Diff_PP)
         chi2_SS = np.trace(Diff_SS.T @ CDinv_SS @ Diff_SS)
 
-        logL_PP = -0.5 * (chi2_PP) #  / N_PP
-        logL_SS = -0.5 * (chi2_SS) #  / N_SS
+        logL_PP = -0.5 * chi2_PP - 0.5 * n_obs_PP * model.loge
+        logL_SS = -0.5 * chi2_SS - 0.5 * n_obs_SS * model.loge2
 
     logL = logL_PP + logL_SS
-    return logL, logL_PP, logL_SS
+    return _finite_or_bad(logL), _finite_or_bad(logL_PP), _finite_or_bad(logL_SS)
 
 def calc_like_prob_travel_time(model, bookkeeping):
     import numpy as np
@@ -193,27 +276,33 @@ def calc_like_prob_travel_time(model, bookkeeping):
         arr_PP_model = create_arrivals_from_model(model, bookkeeping)
         if arr_PP_model.shape != arr_PP_obs.shape:
             return BAD
+        if np.any(~np.isfinite(arr_PP_model)):
+            return BAD
 
         diff_PP = arr_PP_model - arr_PP_obs
 
         arr_PP_unc *= np.exp(0.5 * model.loge_TT)
-        logL_PP = -0.5 * np.sum((diff_PP / arr_PP_unc) ** 2)
-        return logL_PP
+        logL_PP = -0.5 * np.sum((diff_PP / arr_PP_unc) ** 2) - 0.5 * len(arr_PP_obs) * model.loge_TT
+        return _finite_or_bad(logL_PP)
 
     elif bookkeeping.mode == 2:
         arr_SS_model = create_arrivals_from_model(model, bookkeeping)
         if arr_SS_model.shape != arr_SS_obs.shape:
             return BAD
+        if np.any(~np.isfinite(arr_SS_model)):
+            return BAD
 
         diff_SS = arr_SS_model - arr_SS_obs
 
-        arr_PP_unc *= np.exp(0.5 * model.loge_TT)
-        logL_SS = -0.5 * np.sum((diff_SS / arr_SS_unc) ** 2)
-        return logL_SS
+        arr_SS_unc *= np.exp(0.5 * model.loge_TT)
+        logL_SS = -0.5 * np.sum((diff_SS / arr_SS_unc) ** 2) - 0.5 * len(arr_SS_obs) * model.loge_TT
+        return _finite_or_bad(logL_SS)
 
     elif bookkeeping.mode == 3:
         arr_PP_model, arr_SS_model = create_arrivals_from_model(model, bookkeeping)
         if arr_PP_model.shape != arr_PP_obs.shape or arr_SS_model.shape != arr_SS_obs.shape:
+            return BAD
+        if np.any(~np.isfinite(arr_PP_model)) or np.any(~np.isfinite(arr_SS_model)):
             return BAD
 
         diff_PP = arr_PP_model - arr_PP_obs
@@ -221,10 +310,10 @@ def calc_like_prob_travel_time(model, bookkeeping):
 
         arr_PP_unc *= np.exp(0.5 * model.loge_TT)
         arr_SS_unc *= np.exp(0.5 * model.loge_TT2)
-        logL_PP = -0.5 * np.sum((diff_PP / arr_PP_unc) ** 2)
-        logL_SS = -0.5 * np.sum((diff_SS / arr_SS_unc) ** 2)
+        logL_PP = -0.5 * np.sum((diff_PP / arr_PP_unc) ** 2) - 0.5 * len(arr_PP_obs) * model.loge_TT
+        logL_SS = -0.5 * np.sum((diff_SS / arr_SS_unc) ** 2) - 0.5 * len(arr_SS_obs) * model.loge_TT2
 
-        return logL_PP + logL_SS
+        return _finite_or_bad(logL_PP + logL_SS)
 
 def calc_like_prob_gv(model, bookkeeping):
     import numpy as np
@@ -239,30 +328,9 @@ def calc_like_prob_gv(model, bookkeeping):
     else:
         vpvsr = default_vpvsr
 
-    # convert interface depths to layer thicknesses
-    H_interfaces = np.asarray(model.H, dtype=float)
-
-    if H_interfaces.size == 0:
-        H = np.array([0.0])
-        thickness = np.array([])
-    else:
-        thickness = np.diff(np.r_[0.0, H_interfaces])
-        H = np.r_[thickness, 0.0]
-
-    # build model
-    if bookkeeping.mode == 1:
-        vp = np.asarray(model.v, dtype=float)
-        vs = vp / vpvsr
-    elif bookkeeping.mode == 2:
-        vs = np.asarray(model.v, dtype=float)
-        vp = vs * vpvsr
-    elif bookkeeping.mode == 3:
-        vs = np.asarray(model.v, dtype=float)
-        vp = vs * vpvsr
-    else:
+    if bookkeeping.mode not in (1, 2, 3):
         return BAD
-
-    rho = 0.8 * vs
+    H, vp, vs, rho = disba_layers_from_model(model, bookkeeping, vpvsr)
 
     # ---------- pre-checks ----------
     if np.any(~np.isfinite(vp)) or np.any(~np.isfinite(vs)) or np.any(~np.isfinite(rho)):
@@ -273,17 +341,18 @@ def calc_like_prob_gv(model, bookkeeping):
     if np.any(np.asarray(vpvsr) <= 0):
         return BAD
 
-    if thickness.size > 0:
-        if np.any(thickness <= 0):
+    finite_thickness = H[:-1]
+    if finite_thickness.size > 0:
+        if np.any(finite_thickness <= 0):
             return BAD
-        if np.any(thickness < 0.05):
+        if np.any(finite_thickness < 0.05):
             return BAD
 
-    if np.any(np.diff(vs) <= 0):
-        return BAD
-
-    if np.any(np.diff(vp) <= 0):
-        return BAD
+    if _enforce_increasing_velocity(bookkeeping):
+        if np.any(np.diff(vs) <= 0):
+            return BAD
+        if np.any(np.diff(vp) <= 0):
+            return BAD
 
     # ---------- disba call ----------
     try:
@@ -300,9 +369,9 @@ def calc_like_prob_gv(model, bookkeeping):
     diff_gv = gv_model - gv_obs
     gv_unc = gv_unc * np.exp(0.5 * model.loge_gv)
 
-    logL_gv = -0.5 * np.sum((diff_gv / gv_unc) ** 2)
+    logL_gv = -0.5 * np.sum((diff_gv / gv_unc) ** 2) - 0.5 * len(periods) * model.loge_gv
 
-    return logL_gv
+    return _finite_or_bad(logL_gv)
 
 def calc_like_prob_avg_vs(model, bookkeeping):
 
@@ -313,6 +382,8 @@ def calc_like_prob_avg_vs(model, bookkeeping):
         vpvsr = model.rho
     else:
         vpvsr = _default_fixed_vpvs(bookkeeping)
+
+    H = np.diff(np.r_[0.0, model.H])
 
     # define vs
     if bookkeeping.mode == 1: 
@@ -326,18 +397,37 @@ def calc_like_prob_avg_vs(model, bookkeeping):
         vp = model.v * vpvsr
 
     # calculate avg vs in model
-    avg_vs_model = np.sum(model.H * vs[:-1]) / np.sum(model.H)
+    if top_layer_gradient_enabled(getattr(bookkeeping, "assumptions", None)) and H.size > 0:
+        vs_layer = np.asarray(vs[:-1], dtype=float).copy()
+        if bookkeeping.mode == 1:
+            vpvsr_arr = np.asarray(vpvsr, dtype=float)
+            vpvsr_finite = vpvsr_arr if vpvsr_arr.ndim == 0 else vpvsr_arr[:-1]
+            a_vs = _as_slope_array(getattr(model, "a", 0.0), len(vs_layer)) / vpvsr_finite
+        else:
+            a_vs = _as_slope_array(getattr(model, "a", 0.0), len(vs_layer))
+        if all_layer_gradient_enabled(getattr(bookkeeping, "assumptions", None)):
+            for i, h_i in enumerate(H):
+                z = np.linspace(0.0, h_i, 64)
+                vs_layer[i] = np.trapz(
+                    layer_velocity(vs_layer[i], a_vs[i], z, assumptions=bookkeeping.assumptions), z
+                ) / h_i
+        else:
+            z = np.linspace(0.0, H[0], 64)
+            vs_layer[0] = np.trapz(top_layer_velocity(vs_layer[0], a_vs[0], z, assumptions=bookkeeping.assumptions), z) / H[0]
+    else:
+        vs_layer = np.asarray(vs[:-1], dtype=float)
+    avg_vs_model = np.sum(H * vs_layer) / np.sum(H)
     
     diff_avg_vs = (avg_vs_model - avg_vs_ref)
     avg_vs_unc *= np.exp(0.5 * model.loge_avg_vs)
-    logL_avg_vs = -0.5 * np.sum((diff_avg_vs / avg_vs_unc) ** 2)
+    logL_avg_vs = -0.5 * np.sum((diff_avg_vs / avg_vs_unc) ** 2) - 0.5 * model.loge_avg_vs
     
-    return logL_avg_vs
+    return _finite_or_bad(logL_avg_vs)
 
 import copy
 import numpy as np
 
-def birth(model, prior, rayp):
+def birth(model, prior, rayp, assumptions=None):
     """
     Birth move with H as depths (monotonically increasing).
 
@@ -400,20 +490,22 @@ def birth(model, prior, rayp):
     neww   = np.random.uniform(prior.wRange[0],   prior.wRange[1])
     neww2  = np.random.uniform(prior.wRange[0],   prior.wRange[1])
     newrho = np.random.uniform(prior.rhoRange[0], prior.rhoRange[1])
+    newa   = np.random.uniform(prior.aRange[0],   prior.aRange[1])
 
     # -----------------------------
     # 3. Sample new v, enforcing strictly increasing velocity
     # -----------------------------
     v_min, v_max = prior.vRange[0], prior.vRange[1]
 
-    # lower bound: previous layer velocity
-    if k > 0:
-        v_min = max(v_min, model_new.v[k - 1])
+    if velocity_transition_directions(assumptions) is None and enforce_increasing_velocity(assumptions):
+        # lower bound: previous layer velocity
+        if k > 0:
+            v_min = max(v_min, model_new.v[k - 1])
 
-    # upper bound: next layer or half-space (index N)
-    # v has length N+1, so v[k] exists for k in [0, N]
-    if k <= N:
-        v_max = min(v_max, model_new.v[k])
+        # upper bound: next layer or half-space (index N)
+        # v has length N+1, so v[k] exists for k in [0, N]
+        if k <= N:
+            v_max = min(v_max, model_new.v[k])
 
     if v_min >= v_max:
         return model, False
@@ -428,16 +520,18 @@ def birth(model, prior, rayp):
     model_new.w2  = np.insert(model_new.w2,  k, neww2)
     model_new.v   = np.insert(model_new.v,   k, newv)
     model_new.rho = np.insert(model_new.rho, k, newrho)
+    if all_layer_gradient_enabled(assumptions):
+        model_new.a = np.insert(_as_slope_array(model_new.a, N), k, newa)
     model_new.Nlayer = N + 1
 
     # Final consistency check (including monotonic H & v)
-    success = check_model(model_new, prior, rayp)
+    success = check_model(model_new, prior, rayp, assumptions=assumptions)
     if success:
         return model_new, True
     return model, False
 
 
-def death(model, prior, rayp):
+def death(model, prior, rayp, assumptions=None):
     model_new = copy.deepcopy(model)
     if model_new.Nlayer > 1:
         idx = np.random.randint(model_new.Nlayer)
@@ -447,13 +541,15 @@ def death(model, prior, rayp):
         model_new.w2  = np.delete(model_new.w2, idx)
         model_new.v   = np.delete(model_new.v, idx)
         model_new.rho = np.delete(model_new.rho, idx)
+        if all_layer_gradient_enabled(assumptions):
+            model_new.a = np.delete(_as_slope_array(model_new.a, model.Nlayer), idx)
         # Check model
-        success = check_model(model_new, prior, rayp)
+        success = check_model(model_new, prior, rayp, assumptions=assumptions)
         if success:
             return model_new, True
     return model, False
 
-def update_H(model, prior, rayp):
+def update_H(model, prior, rayp, assumptions=None):
     # Copy model
     model_new = copy.deepcopy(model)
     N = model_new.Nlayer
@@ -490,7 +586,7 @@ def update_H(model, prior, rayp):
     model_new.H[idx] = newH
 
     # Final consistency check (monotonicity etc.)
-    success = check_model(model_new, prior, rayp)
+    success = check_model(model_new, prior, rayp, assumptions=assumptions)
     if success:
         return model_new, True
     return model, False
@@ -567,7 +663,18 @@ def update_loge_TT(model, prior):
         return model_new, True
     return model, False
 
-def update_v(model, prior, rayp):
+
+def update_loge_TT2(model, prior):
+    # Copy model
+    model_new = copy.deepcopy(model)
+    # Update
+    model_new.loge_TT2 += prior.logeStd * np.random.randn()
+    # Check range and return
+    if prior.logeRange[0] <= model_new.loge_TT2 <= prior.logeRange[1]:
+        return model_new, True
+    return model, False
+
+def update_v(model, prior, rayp, assumptions=None):
     # Copy model
     model_new = copy.deepcopy(model)
     # Select a layer and update
@@ -580,8 +687,17 @@ def update_v(model, prior, rayp):
 
     # Determine admissible velocity interval for strictly increasing v
     v_min, v_max = prior.vRange[0], prior.vRange[1]
-    if idx > 0: v_min = max(v_min, model_new.v[idx - 1])
-    if idx < N: v_max = min(v_max, model_new.v[idx + 1])
+    if all_layer_gradient_enabled(assumptions):
+        if idx > 0:
+            v_min = max(v_min, layer_bottom_velocity(model_new, idx - 1, assumptions=assumptions))
+    elif velocity_transition_directions(assumptions) is None and enforce_increasing_velocity(assumptions):
+        if idx > 0:
+            lower = model_new.v[idx - 1]
+            if idx == 1 and top_layer_gradient_enabled(assumptions):
+                lower = top_layer_velocity(model_new.v[0], model_new.a, model_new.H[0], assumptions=assumptions)
+            v_min = max(v_min, lower)
+        if idx < N:
+            v_max = min(v_max, model_new.v[idx + 1])
 
     if not (v_min < newv < v_max):
         return model, False
@@ -589,12 +705,82 @@ def update_v(model, prior, rayp):
     # Accept proposed v in-place
     model_new.v[idx] = newv
 
-    success = check_model(model_new, prior, rayp)
+    success = check_model(model_new, prior, rayp, assumptions=assumptions)
     if success:
         return model_new, True
     return model, False
 
-def update_rho(model, prior, rayp):
+
+def _reflect_into_interval(value, lower, upper):
+    if lower > upper:
+        return np.nan
+    if lower == upper:
+        return float(lower)
+
+    width = upper - lower
+    shifted = (float(value) - lower) % (2.0 * width)
+    if shifted <= width:
+        return lower + shifted
+    return upper - (shifted - width)
+
+
+def _all_layer_slope_interval(model, prior, idx, assumptions=None):
+    h_i = float(layer_thicknesses(model.H)[idx])
+    v_top = float(model.v[idx])
+    v_next = float(model.v[idx + 1])
+    jump = minimum_velocity_jump_fraction(assumptions)
+    directions = velocity_transition_directions(assumptions)
+    direction = directions[idx] if directions is not None else "inc"
+
+    a_low = float(prior.aRange[0])
+    a_high = float(prior.aRange[1])
+    if h_i <= 0.0:
+        return np.nan, np.nan
+
+    # Keep the full evaluated layer inside vRange and increasing with depth.
+    a_low = max(a_low, (prior.vRange[0] - v_top) / h_i)
+    a_high = min(a_high, (prior.vRange[1] - v_top) / h_i)
+    eps = max(1e-12, 1e-12 * max(abs(a_low), abs(a_high), 1.0))
+    a_low = max(a_low, eps)
+
+    if direction == "inc":
+        a_high = min(a_high, (v_next / (1.0 + jump) - v_top) / h_i - eps)
+    elif direction == "dec":
+        a_low = max(a_low, (v_next / max(1.0 - jump, 1e-12) - v_top) / h_i + eps)
+    elif direction == "free" and jump > 0.0:
+        bottom_current = v_top + float(_as_slope_array(model.a, model.Nlayer)[idx]) * h_i
+        if v_next >= bottom_current:
+            a_high = min(a_high, (v_next / (1.0 + jump) - v_top) / h_i - eps)
+        else:
+            a_low = max(a_low, (v_next / max(1.0 - jump, 1e-12) - v_top) / h_i + eps)
+
+    return a_low, a_high
+
+
+def update_a(model, prior, rayp, assumptions=None):
+    if not top_layer_gradient_enabled(assumptions):
+        return model, False
+
+    model_new = copy.deepcopy(model)
+    if all_layer_gradient_enabled(assumptions):
+        a = _as_slope_array(model_new.a, model_new.Nlayer)
+        idx = np.random.randint(0, model_new.Nlayer)
+        a_low, a_high = _all_layer_slope_interval(model_new, prior, idx, assumptions=assumptions)
+        if not np.isfinite(a_low) or not np.isfinite(a_high) or a_low > a_high:
+            return model, False
+        a[idx] = _reflect_into_interval(a[idx] + prior.aStd * np.random.randn(), a_low, a_high)
+        model_new.a = a
+    else:
+        model_new.a += prior.aStd * np.random.randn()
+        if not (prior.aRange[0] <= model_new.a <= prior.aRange[1]):
+            return model, False
+
+    success = check_model(model_new, prior, rayp, assumptions=assumptions)
+    if success:
+        return model_new, True
+    return model, False
+
+def update_rho(model, prior, rayp, assumptions=None):
     # Copy model
     model_new = copy.deepcopy(model)
     # Select a layer and update
@@ -604,7 +790,7 @@ def update_rho(model, prior, rayp):
     if not (prior.rhoRange[0] <= model_new.rho[idx] <= prior.rhoRange[1]):
         return model, False
     # Check model
-    success = check_model(model_new, prior, rayp)
+    success = check_model(model_new, prior, rayp, assumptions=assumptions)
     if success:
         return model_new, True
     return model, False
@@ -613,6 +799,7 @@ def rjmcmc_run(P, D, prior, bookkeeping, saveDir, CDinv=None):
     # mode 1/2: P and D are one trace
     # mode 3: P_PP = P[:,0]; P_SS = P[:,1]; same for D; CDinv_PP = CDinv[0]; CDinvv_SS = CDinv[1]
 
+    _ensure_save_dir(saveDir)
     n_len =  P.shape[0]
 
     # Extract variables for mode 3
@@ -634,9 +821,9 @@ def rjmcmc_run(P, D, prior, bookkeeping, saveDir, CDinv=None):
 
     # Start from an empty model
     if fixed_nlayer is not None:
-        model = Model.create_initial(prior=prior, Nlayer=int(fixed_nlayer))
+        model = Model.create_initial(prior=prior, Nlayer=int(fixed_nlayer), assumptions=bookkeeping.assumptions)
     else:
-        model = Model.create_initial(prior=prior)
+        model = Model.create_initial(prior=prior, assumptions=bookkeeping.assumptions)
 
     # Initial likelihood
     logL_trace = []
@@ -691,11 +878,19 @@ def rjmcmc_run(P, D, prior, bookkeeping, saveDir, CDinv=None):
         if bookkeeping.fitLoge:
             if bookkeeping.mode in [1, 2]: actionPool = np.append(actionPool, [5]) # loge
             if bookkeeping.mode == 3: actionPool = np.append(actionPool, [5,6]) # loge and loge2
+    if bookkeeping.fitLoge:
+        if bookkeeping.fitgv:
+            actionPool = np.append(actionPool, [7])
+        if bookkeeping.fitavgvs:
+            actionPool = np.append(actionPool, [8])
+        if bookkeeping.fitTT:
+            if bookkeeping.mode in [1, 2]:
+                actionPool = np.append(actionPool, [9])
+            if bookkeeping.mode == 3:
+                actionPool = np.append(actionPool, [9, 12])
     if bookkeeping.mode == 3 or ((bookkeeping.fitgv or bookkeeping.fitavgvs) and bookkeeping.fitrho): actionPool = np.append(actionPool, [11]) # rho
-    
-    # if bookkeeping.fitgv: actionPool = np.append(actionPool, [7]) # loge_gv # commented out so loge_gv === 0
-    # if bookkeeping.fitavgvs: actionPool = np.append(actionPool, [8])
-    # if bookkeeping.fitTT: actionPool = np.append(actionPool, [9])
+    if top_layer_gradient_enabled(bookkeeping.assumptions):
+        actionPool = np.append(actionPool, [13]) # top-layer gradient parameter
 
     for iStep in range(totalSteps):
 
@@ -704,11 +899,11 @@ def rjmcmc_run(P, D, prior, bookkeeping, saveDir, CDinv=None):
 
         for action in actions:
             if action == 0:
-                model_new, _ = birth(model_new, prior, bookkeeping.rayp)
+                model_new, _ = birth(model_new, prior, bookkeeping.rayp, assumptions=bookkeeping.assumptions)
             elif action == 1:
-                model_new, _ = death(model_new, prior, bookkeeping.rayp)
+                model_new, _ = death(model_new, prior, bookkeeping.rayp, assumptions=bookkeeping.assumptions)
             elif action == 2:
-                model_new, _ = update_H(model_new, prior, bookkeeping.rayp)
+                model_new, _ = update_H(model_new, prior, bookkeeping.rayp, assumptions=bookkeeping.assumptions)
             elif action == 3:
                 model_new, _ = update_w(model_new, prior)
             elif action == 4:
@@ -724,9 +919,13 @@ def rjmcmc_run(P, D, prior, bookkeeping, saveDir, CDinv=None):
             elif action == 9:
                 model_new, _ = update_loge_TT(model_new, prior)
             elif action == 10:
-                model_new, _ = update_v(model_new, prior, bookkeeping.rayp)
+                model_new, _ = update_v(model_new, prior, bookkeeping.rayp, assumptions=bookkeeping.assumptions)
             elif action == 11:
-                model_new, _ = update_rho(model_new, prior, bookkeeping.rayp)
+                model_new, _ = update_rho(model_new, prior, bookkeeping.rayp, assumptions=bookkeeping.assumptions)
+            elif action == 12:
+                model_new, _ = update_loge_TT2(model_new, prior)
+            elif action == 13:
+                model_new, _ = update_a(model_new, prior, bookkeeping.rayp, assumptions=bookkeeping.assumptions)
 
         # Compute likelihood
         if fit_waveform:
@@ -750,10 +949,6 @@ def rjmcmc_run(P, D, prior, bookkeeping, saveDir, CDinv=None):
 
         # Acceptance probability
         log_accept_ratio = (new_logL - logL)
-        if fit_waveform:
-            log_accept_ratio += n_len * ((model.loge - model_new.loge) + (model.loge2 - model_new.loge2))
-        log_accept_ratio += 2 * (model.loge_gv - model_new.loge_gv)
-        log_accept_ratio += (model.loge_avg_vs - model_new.loge_avg_vs)
 
         if np.log(np.random.rand()) < log_accept_ratio:
             model = model_new
@@ -790,7 +985,7 @@ def rjmcmc_run(P, D, prior, bookkeeping, saveDir, CDinv=None):
             ax.set_xlabel("Step")
             ax.set_ylabel("log Likelihood")
             fig.tight_layout()
-            fig.savefig(os.path.join(saveDir, "logL.png"))  # overwrites each time
+            _savefig_with_retry(fig, os.path.join(saveDir, "logL.png"))  # overwrites each time
             plt.close(fig)
 
             # Also save waveform vs. group velocity misfit
@@ -799,27 +994,23 @@ def rjmcmc_run(P, D, prior, bookkeeping, saveDir, CDinv=None):
                     fig, ax = plt.subplots()
                     ax.plot(logL_body_trace, 'k-', label="body-wave")
                     ax.plot(logL_gv_trace, 'r-', label="group vel.")
-                    ymin = min(logL_body_trace[-1], logL_gv_trace[-1]) - 0.1 * abs(logL_body_trace[-1] - logL_gv_trace[-1])
-                    ymax = max(logL_body_trace[-1], logL_gv_trace[-1]) + 0.1 * abs(logL_body_trace[-1] - logL_gv_trace[-1])
-                    ax.set_ylim(ymin, ymax)
+                    _set_finite_ylim(ax, logL_body_trace, logL_gv_trace)
                     ax.set_xscale('log')
                     ax.set_xlabel("Step")
                     ax.set_ylabel("log Likelihood")
                     fig.tight_layout()
-                    fig.savefig(os.path.join(saveDir, "logL_wf_gv.png"))  # overwrites each time
+                    _savefig_with_retry(fig, os.path.join(saveDir, "logL_wf_gv.png"))  # overwrites each time
                     plt.close(fig)
                 if bookkeeping.fitavgvs:
                     fig, ax = plt.subplots()
                     ax.plot(logL_body_trace, 'k-', label="body-wave")
                     ax.plot(logL_avg_vs_trace, 'r-', label="avg vs")
-                    ymin = min(logL_body_trace[-1], logL_avg_vs_trace[-1]) - 0.1 * abs(logL_body_trace[-1] - logL_avg_vs_trace[-1])
-                    ymax = max(logL_body_trace[-1], logL_avg_vs_trace[-1]) + 0.1 * abs(logL_body_trace[-1] - logL_avg_vs_trace[-1])
-                    ax.set_ylim(ymin, ymax)
+                    _set_finite_ylim(ax, logL_body_trace, logL_avg_vs_trace)
                     ax.set_xscale('log')
                     ax.set_xlabel("Step")
                     ax.set_ylabel("log Likelihood")
                     fig.tight_layout()
-                    fig.savefig(os.path.join(saveDir, "logL_wf_avgvs.png"))  # overwrites each time
+                    _savefig_with_retry(fig, os.path.join(saveDir, "logL_wf_avgvs.png"))  # overwrites each time
                     plt.close(fig)
 
             # Save PP/SS plots for mode 3
@@ -829,21 +1020,27 @@ def rjmcmc_run(P, D, prior, bookkeeping, saveDir, CDinv=None):
                 ax.plot(logL_SS_trace, 'r-', label="SS")
                 if bookkeeping.fitgv: ax.plot(logL_gv_trace, 'k-', label="group vel.")
                 if bookkeeping.fitavgvs: ax.plot(logL_avg_vs_trace, 'k-', label="avg vs")
-                ymin = min(logL_SS_trace[-1], logL_PP_trace[-1]) - 0.1 * abs(logL_SS_trace[-1] - logL_PP_trace[-1])
-                ymax = max(logL_SS_trace[-1], logL_PP_trace[-1]) + 0.1 * abs(logL_SS_trace[-1] - logL_PP_trace[-1])
-                ax.set_ylim(ymin, ymax)
+                _set_finite_ylim(
+                    ax,
+                    logL_PP_trace,
+                    logL_SS_trace,
+                    logL_gv_trace if bookkeeping.fitgv else [],
+                    logL_avg_vs_trace if bookkeeping.fitavgvs else [],
+                )
                 ax.set_xscale('log')
                 ax.set_xlabel("Step")
                 ax.set_ylabel("log Likelihood")
                 ax.legend(loc="upper right")
                 fig.tight_layout()
-                fig.savefig(os.path.join(saveDir, "logL_PPSS.png"))  # overwrites each time
+                _savefig_with_retry(fig, os.path.join(saveDir, "logL_PPSS.png"))  # overwrites each time
                 plt.close(fig)
 
             # Overwrite progress log
             elapsed = time.time() - start_time
             now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            with open(os.path.join(saveDir, "progress_log.txt"), "a") as f:
-                f.write(f"[{now}] Step {iStep+1}/{totalSteps}, Elapsed: {elapsed:.2f} sec\n")
+            _append_progress_with_retry(
+                os.path.join(saveDir, "progress_log.txt"),
+                f"[{now}] Step {iStep+1}/{totalSteps}, Elapsed: {elapsed:.2f} sec\n",
+            )
 
     return ensemble, logL_trace

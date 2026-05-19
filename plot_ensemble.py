@@ -174,8 +174,9 @@ H_true = None; v_true = None; rho_true = None
 
 plot_velocity_ensemble(ensemble_all, bookkeeping, prior.HRange, 
                        H_true=H_true, v_true=v_true, rho_true=rho_true)
-plot_velocity_density_image(ensemble_all, bookkeeping, prior.HRange, nz=200, nv=200, smooth_sigma=2.0,
-                            H_true=H_true, v_true=v_true, rho_true=rho_true)
+if not (bookkeeping.mode == 3 or (bookkeeping.fitgv and bookkeeping.fitrho)):
+    plot_velocity_density_image(ensemble_all, bookkeeping, prior.HRange, nz=200, nv=200, smooth_sigma=2.0,
+                                H_true=H_true, v_true=v_true, rho_true=rho_true)
 
 plot_predicted_vs_input(ensemble_all, P, D, prior, bookkeeping)
 plot_posterior_error_params(ensemble_all, bookkeeping)
@@ -213,5 +214,5 @@ if bookkeeping.fitgv:
         vpvsr=1.8,
         wave="love",
         mode_idx=0,   # disba fundamental mode
-        n_vel=200
+        n_vel=40
     )

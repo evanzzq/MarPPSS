@@ -1,5 +1,6 @@
 import copy
 import os
+import re
 from pathlib import Path
 
 MODE_ALIASES = {
@@ -28,7 +29,10 @@ def load_workflow_config(path):
 
 
 def _expand_path_string(value):
-    expanded = os.path.expandvars(os.path.expanduser(value))
+    expanded = os.path.expanduser(value)
+    expanded = os.path.expandvars(expanded)
+    expanded = re.sub(r"\$\{([^}]+)\}", lambda match: os.environ.get(match.group(1), match.group(0)), expanded)
+    expanded = re.sub(r"\$([A-Za-z_][A-Za-z0-9_]*)", lambda match: os.environ.get(match.group(1), match.group(0)), expanded)
     return expanded
 
 
@@ -245,6 +249,10 @@ def _resolve_new_experiment(config, experiment_name):
             "HRange": exp_cfg.get("HRange", prior_defaults.get("HRange", [1.0, 60.0])),
             "wRange": exp_cfg.get("wRange", prior_defaults.get("wRange", [0.5, 1.5])),
             "vRange": exp_cfg.get("vRange", prior_defaults.get("vRange", [1.0, 4.0])),
+            "aRange": exp_cfg.get(
+                "aRange",
+                exp_cfg.get("slopeRange", prior_defaults.get("aRange", prior_defaults.get("slopeRange", [0.0, 0.0]))),
+            ),
             "logeRange": exp_cfg.get("logeRange", prior_defaults.get("logeRange", [0.0, 10.0])),
             "rhoRange": exp_cfg.get("rhoRange", prior_defaults.get("rhoRange", [1.5, 2.2])),
             "totalSteps": exp_cfg.get("totalSteps", runtime_defaults.get("totalSteps", int(1e6))),
@@ -298,7 +306,7 @@ def _resolve_legacy_experiment(config, experiment_name):
         available = ", ".join(list_experiments(config))
         raise KeyError(f"Unknown experiment '{experiment_name}'. Available: {available}")
 
-    resolved = {**common, **selected}
+    resolved = _deep_merge(common, selected)
     resolved["mode"] = _canonical_mode(resolved["mode"])
     resolved["event_name"] = resolved.get("evname")
     resolved["travel_times"] = _normalize_travel_times(resolved.get("travel_times"))

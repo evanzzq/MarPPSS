@@ -1,6 +1,7 @@
 import os, pickle, time as pytime, numpy as np, multiprocessing as mp, yaml
 from marppss.rjmcmc import rjmcmc_run
 from marppss.model import Bookkeeping, Prior
+from marppss.config import _deep_merge
 from marppss.util import prepare_experiment, prep_data  # <-- add prep_data import
 from obspy import UTCDateTime  # for PParr / SSarr strings
 
@@ -44,8 +45,8 @@ if __name__ == "__main__":
 
     for exp_idx, exp_cfg in enumerate(experiments):
 
-        # merge common and experiment
-        exp_vars = {**common_cfg, **exp_cfg}
+        # merge common and experiment, preserving nested defaults like assumptions
+        exp_vars = _deep_merge(common_cfg, exp_cfg)
 
         # define experiment name / data_type
         if exp_vars["mode"] == 1:

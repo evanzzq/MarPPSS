@@ -1,4 +1,14 @@
 import numpy as np
+from marppss.velocity import (
+    _as_slope_array,
+    all_layer_gradient_enabled,
+    check_velocity_transitions,
+    layer_bottom_velocity,
+    layer_travel_times,
+    top_layer_gradient_enabled,
+    top_layer_velocity,
+    velocity_transition_directions,
+)
 
 def PSVRTmatrix(p, mi, mt):
     """
@@ -83,21 +93,66 @@ def SHmatrix(p, mi, mt):
 
     return Rss, Tss
 
-def check_model(model, prior, rayp):
+def enforce_increasing_velocity(assumptions=None):
+    assumptions = assumptions or {}
+    return bool(assumptions.get("enforce_increasing_velocity", True))
 
-    H = np.diff(np.insert(model.H, 0, 0)) # depth to thickness
-    v = np.asarray(model.v[:-1], dtype=float)
 
-    # Strictly increasing velocity
-    if not np.all(np.diff(model.v) > 0.0):
+def check_model(model, prior, rayp, assumptions=None):
+
+    directions = velocity_transition_directions(assumptions)
+    v_profile = np.asarray(model.v, dtype=float)
+    if np.any(~np.isfinite(v_profile)):
         return False
+    if np.any(v_profile < prior.vRange[0]) or np.any(v_profile > prior.vRange[1]):
+        return False
+
+    if directions is None:
+        # Strictly increasing velocity
+        if enforce_increasing_velocity(assumptions) and not np.all(np.diff(model.v) > 0.0):
+            return False
+        if check_velocity_transitions(model, assumptions) is False:
+            return False
+    elif check_velocity_transitions(model, assumptions) is False:
+        return False
+
+    if all_layer_gradient_enabled(assumptions):
+        slopes = _as_slope_array(getattr(model, "a", 0.0), int(model.Nlayer))
+        if np.any(slopes < prior.aRange[0]) or np.any(slopes > prior.aRange[1]):
+            return False
+        if model.Nlayer > 0:
+            bottoms = np.array(
+                [layer_bottom_velocity(model, i, assumptions=assumptions) for i in range(int(model.Nlayer))],
+                dtype=float,
+            )
+            if np.any(~np.isfinite(bottoms)) or np.any(bottoms <= 0.0):
+                return False
+            if np.any(bottoms < prior.vRange[0]) or np.any(bottoms > prior.vRange[1]):
+                return False
+            if np.any(bottoms <= np.asarray(model.v[:-1], dtype=float)):
+                return False
+
+    if top_layer_gradient_enabled(assumptions):
+        slopes = _as_slope_array(getattr(model, "a", 0.0), max(1, int(model.Nlayer)))
+        if np.any(slopes < prior.aRange[0]) or np.any(slopes > prior.aRange[1]):
+            return False
+        if model.H.size > 0 and not all_layer_gradient_enabled(assumptions):
+            v_bottom = top_layer_velocity(model.v[0], model.a, model.H[0], assumptions=assumptions)
+            if v_bottom <= 0.0:
+                return False
+            if v_bottom < prior.vRange[0] or v_bottom > prior.vRange[1]:
+                return False
+            if directions is None and enforce_increasing_velocity(assumptions) and v_bottom >= model.v[1]:
+                return False
 
     if isinstance(rayp, float):
         # mode 1/2
-        tau = 2.0 * H * np.sqrt(1.0 / (v**2) - rayp**2)
+        tau = layer_travel_times(model, rayp, assumptions=assumptions)
     else:
         # mode 3: use SS (because of longer travel time)
-        tau = 2.0 * H * np.sqrt(1.0 / (v**2) - rayp[1]**2)
+        tau = layer_travel_times(model, rayp[1], assumptions=assumptions)
+    if np.any(~np.isfinite(tau)):
+        return False
     
     arr = np.cumsum(tau)
     if arr[-1] >= prior.tlen:
@@ -173,6 +228,7 @@ def prepare_experiment(exp_vars):
         wRange=tuple(exp_vars["wRange"]),
         logeRange=tuple(exp_vars["logeRange"]),
         vRange=tuple(exp_vars["vRange"]),
+        aRange=tuple(exp_vars.get("aRange", exp_vars.get("slopeRange", (0.0, 0.0)))),
         rhoRange=tuple(exp_vars["rhoRange"])
     )
 
@@ -196,6 +252,16 @@ def prepare_experiment(exp_vars):
             if pp_times.size != ss_times.size:
                 raise ValueError("Joint travel-time inversion requires the same number of PP and SS picks.")
             fixed_nlayer = int(pp_times.size)
+
+    directions = velocity_transition_directions(exp_vars.get("assumptions"))
+    if directions is not None:
+        if not exp_vars["fitTT"] or fixed_nlayer is None:
+            raise ValueError("velocity_transition_directions is only supported for fixed-layer travel-time inversions.")
+        if len(directions) != int(fixed_nlayer):
+            raise ValueError(
+                "velocity_transition_directions must have one entry per supplied travel-time pick/discontinuity; "
+                f"got {len(directions)} for fixedNlayer={fixed_nlayer}."
+            )
 
     # --- Bookkeeping ---
     bookkeeping = Bookkeeping(
@@ -371,14 +437,17 @@ def prep_data(
     start_time = st_z.stats.starttime
     dt = st_z.stats.delta
 
-    # Bandpass
-    if PPfreq is not None and SSfreq is not None:
-        st_z_filt = st_z.copy().filter("bandpass", freqmin=PPfreq[0], freqmax=PPfreq[1],
-                                    corners=2, zerophase=True)
-        st_t_filt = st_t.copy().filter("bandpass", freqmin=SSfreq[0], freqmax=SSfreq[1],
-                                    corners=2, zerophase=True)
-    else:
-        st_z_filt, st_t_filt = st_z.copy(), st_t.copy()
+    # Bandpass each component only when its frequency band is provided.
+    st_z_filt = st_z.copy()
+    st_t_filt = st_t.copy()
+    if PPfreq is not None:
+        st_z_filt = st_z_filt.filter(
+            "bandpass", freqmin=PPfreq[0], freqmax=PPfreq[1], corners=2, zerophase=True
+        )
+    if SSfreq is not None:
+        st_t_filt = st_t_filt.filter(
+            "bandpass", freqmin=SSfreq[0], freqmax=SSfreq[1], corners=2, zerophase=True
+        )
 
     # Times (seconds from start_time)
     t_z = st_z_filt.times()

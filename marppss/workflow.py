@@ -9,6 +9,12 @@ from marppss.rjmcmc import rjmcmc_run
 from marppss.util import prep_data, prepare_experiment
 
 
+def _normalize_freq_range(value):
+    if value in (None, False):
+        return None
+    return tuple(value)
+
+
 def mode_to_label(mode):
     return {1: "PP", 2: "SS", 3: "joint"}[mode]
 
@@ -78,8 +84,8 @@ def ensure_prepared_data(resolved, force=False):
             outdir=outdir,
             evname=resolved["evname"],
             dtype=resolved["dtype"],
-            PPfreq=tuple(resolved["PPfreq"]) if resolved.get("PPfreq") is not None else None,
-            SSfreq=tuple(resolved["SSfreq"]) if resolved.get("SSfreq") is not None else None,
+            PPfreq=_normalize_freq_range(resolved.get("PPfreq")),
+            SSfreq=_normalize_freq_range(resolved.get("SSfreq")),
             PParr=resolved["PParr"],
             SSarr=resolved["SSarr"],
             cutwin=tuple(resolved["cutwin"]),
@@ -112,8 +118,10 @@ def run_chain(chain_id, exp_vars):
         CDinv=exp_vars.get("CDinv"),
     )
 
+    os.makedirs(save_dir, exist_ok=True)
     with open(os.path.join(save_dir, "ensemble.pkl"), "wb") as f:
         pickle.dump(ensemble, f)
+    os.makedirs(save_dir, exist_ok=True)
     np.savetxt(os.path.join(save_dir, "log_likelihood.txt"), logL_trace)
 
 

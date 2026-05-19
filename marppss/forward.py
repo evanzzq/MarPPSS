@@ -1,6 +1,20 @@
 from marppss.model import Model, Prior, Bookkeeping
 from marppss.util import PSVRTmatrix, SHmatrix
+from marppss.velocity import interface_velocity, layer_bottom_velocity, layer_travel_times
 import numpy as np
+
+
+def _default_fixed_vpvs(bookkeeping):
+    assumptions = getattr(bookkeeping, "assumptions", None) or {}
+    return float(assumptions.get("fixed_vpvs", 1.8))
+
+
+def _mode12_vpvs_pair(model, bookkeeping, idx_top, idx_bottom):
+    if bookkeeping.fitrho:
+        return float(model.rho[idx_top]), float(model.rho[idx_bottom])
+    fixed_vpvs = _default_fixed_vpvs(bookkeeping)
+    return fixed_vpvs, fixed_vpvs
+
 
 def stretch_wavelet(P, stretch):
     """
@@ -48,28 +62,37 @@ def create_D_from_model(P: np.ndarray, model: Model, prior: Prior, bookkeeping: 
         # first disc.
         # define velocities (1 - top, 2 - bottom)
         if bookkeeping.mode == 1:
-            vp1, vp2 = model.v[0], model.v[1]
-            vs1, vs2 = vp1 / 1.80, vp2 / 1.80 # vs shouldn't matter (much) in PP case
+            vp_surface = model.v[0]
+            vp1, vp2 = interface_velocity(model, 0, bookkeeping.assumptions), model.v[1]
+            vpvs1, vpvs2 = _mode12_vpvs_pair(model, bookkeeping, 0, 1)
+            vpvs_surface = vpvs1
+            vs1, vs2 = vp1 / vpvs1, vp2 / vpvs2
+            vs_surface = vp_surface / vpvs_surface
         else: # bookkeeping.mode == 2
-            vs1, vs2 = model.v[0], model.v[1]
-            vp1, vp2 = vs1 * 1.80, vs2 * 1.80 # vp shouldn't matter (much) in SS case
+            vs_surface = model.v[0]
+            vs1, vs2 = interface_velocity(model, 0, bookkeeping.assumptions), model.v[1]
+            vpvs1, vpvs2 = _mode12_vpvs_pair(model, bookkeeping, 0, 1)
+            vpvs_surface = vpvs1
+            vp1, vp2 = vs1 * vpvs1, vs2 * vpvs2
+            vp_surface = vs_surface * vpvs_surface
         # rho = vs * 0.8 from Li et al. (2022)
         rho1, rho2 = vs1 * 800, vs2 * 800
         # define layer model for R/T function input
         mf = [0.001, 0.001, 1.225]
+        mf1 = [vp_surface, vs_surface, vs_surface * 800]
         m1 = [vp1, vs1, rho1]
         m2 = [vp2, vs2, rho2]
         # R/T coef. and amplitude
         if bookkeeping.mode == 1:
             RppU_all = np.zeros(model.Nlayer)
-            Rppf, _, _, _, _, _, _, _    = PSVRTmatrix(bookkeeping.rayp ,m1, mf)
+            Rppf, _, _, _, _, _, _, _    = PSVRTmatrix(bookkeeping.rayp ,mf1, mf)
             _, _, _, _, TppD, _, _, _    = PSVRTmatrix(bookkeeping.rayp ,m1, m2)
             RppU, _, _, _, TppU, _, _, _ = PSVRTmatrix(bookkeeping.rayp ,m2, m1)
             RppU_all[0] = RppU
             amp[0] = RppU / (TppU * TppD * Rppf)
         else: # bookkeeping.mode == 2
             RssU_all = np.zeros(model.Nlayer)
-            Rssf, _    = SHmatrix(bookkeeping.rayp ,m1, mf)
+            Rssf, _    = SHmatrix(bookkeeping.rayp ,mf1, mf)
             _, TssD    = SHmatrix(bookkeeping.rayp ,m1, m2)
             RssU, TssU = SHmatrix(bookkeeping.rayp ,m2, m1)
             RssU_all[0] = RssU
@@ -81,11 +104,13 @@ def create_D_from_model(P: np.ndarray, model: Model, prior: Prior, bookkeeping: 
             # same as first disc.
             # define velocities (1 - top, 2 - bottom)
             if bookkeeping.mode == 1:
-                vp1, vp2 = model.v[k], model.v[k+1]
-                vs1, vs2 = vp1 / 1.80, vp2 / 1.80 # vs shouldn't matter (much) in PP case
+                vp1, vp2 = layer_bottom_velocity(model, k, bookkeeping.assumptions), model.v[k+1]
+                vpvs1, vpvs2 = _mode12_vpvs_pair(model, bookkeeping, k, k + 1)
+                vs1, vs2 = vp1 / vpvs1, vp2 / vpvs2
             else: # bookkeeping.mode == 2
-                vs1, vs2 = model.v[k], model.v[k+1]
-                vp1, vp2 = vs1 * 1.80, vs2 * 1.80 # vp shouldn't matter (much) in SS case
+                vs1, vs2 = layer_bottom_velocity(model, k, bookkeeping.assumptions), model.v[k+1]
+                vpvs1, vpvs2 = _mode12_vpvs_pair(model, bookkeeping, k, k + 1)
+                vp1, vp2 = vs1 * vpvs1, vs2 * vpvs2
             # rho = vs * 0.8 from Li et al. (2022)
             rho1, rho2 = vs1 * 800, vs2 * 800
             # define layer model for R/T function input
@@ -105,10 +130,7 @@ def create_D_from_model(P: np.ndarray, model: Model, prior: Prior, bookkeeping: 
         
         # get arrival time(s)
         # for mode 1/2 (PP or SS), it doesn't matter if it's vp or vs
-        H = np.diff(np.insert(model.H, 0, 0)) # depth to thickness
-        v = np.asarray(model.v[:-1], dtype=float)
-        # per-layer two-way time
-        tau = 2.0 * H * np.sqrt(1.0 / (v**2) - bookkeeping.rayp**2)
+        tau = layer_travel_times(model, bookkeeping.rayp, assumptions=bookkeeping.assumptions)
         # cumulative arrival times at each discontinuity
         arr = np.cumsum(tau)
 
@@ -140,26 +162,29 @@ def create_D_from_model(P: np.ndarray, model: Model, prior: Prior, bookkeeping: 
 
         # first disc.
         # define velocities (1 - top, 2 - bottom)
-        vs1, vs2 = model.v[0], model.v[1]
+        vs_surface = model.v[0]
+        vs1, vs2 = interface_velocity(model, 0, bookkeeping.assumptions), model.v[1]
+        vp_surface = vs_surface * model.rho[0]
         vp1, vp2 = vs1 * model.rho[0], vs2 * model.rho[1]
         # rho = vs * 0.8 from Li et al. (2022)
         # rho here is density (model.rho is vp/vs ratio)
         rho1, rho2 = vs1 * 800, vs2 * 800
         # define layer model for R/T function input
         mf = [0.001, 0.001, 1.225]
+        mf1 = [vp_surface, vs_surface, vs_surface * 800]
         m1 = [vp1, vs1, rho1]
         m2 = [vp2, vs2, rho2]
         # R/T coef. and amplitude
         # PP
         RppU_all = np.zeros(model.Nlayer)
-        Rppf, _, _, _, _, _, _, _    = PSVRTmatrix(bookkeeping.rayp[0] ,m1, mf)
+        Rppf, _, _, _, _, _, _, _    = PSVRTmatrix(bookkeeping.rayp[0] ,mf1, mf)
         _, _, _, _, TppD, _, _, _    = PSVRTmatrix(bookkeeping.rayp[0] ,m1, m2)
         RppU, _, _, _, TppU, _, _, _ = PSVRTmatrix(bookkeeping.rayp[0] ,m2, m1)
         RppU_all[0] = RppU
         amp_PP[0] = RppU / (TppU * TppD * Rppf)
         # SS
         RssU_all = np.zeros(model.Nlayer)
-        Rssf, _    = SHmatrix(bookkeeping.rayp[1] ,m1, mf)
+        Rssf, _    = SHmatrix(bookkeeping.rayp[1] ,mf1, mf)
         _, TssD    = SHmatrix(bookkeeping.rayp[1] ,m1, m2)
         RssU, TssU = SHmatrix(bookkeeping.rayp[1] ,m2, m1)
         RssU_all[0] = RssU
@@ -170,7 +195,7 @@ def create_D_from_model(P: np.ndarray, model: Model, prior: Prior, bookkeeping: 
 
             # same as first disc.
             # define velocities (1 - top, 2 - bottom)
-            vs1, vs2 = model.v[k], model.v[k+1]
+            vs1, vs2 = layer_bottom_velocity(model, k, bookkeeping.assumptions), model.v[k+1]
             vp1, vp2 = vs1 * model.rho[k], vs2 * model.rho[k+1]
             # rho = vs * 0.8 from Li et al. (2022)
             rho1, rho2 = vs1 * 800, vs2 * 800
@@ -190,12 +215,8 @@ def create_D_from_model(P: np.ndarray, model: Model, prior: Prior, bookkeeping: 
             amp_SS[k] = amp_SS[k-1] * (RssU / (TssU * TssD * RssU_all[k-1]))
 
         # get arrival time(s)
-        H = np.diff(np.insert(model.H, 0, 0)) # depth to thickness
-        vs = np.asarray(model.v[:-1], dtype=float)
-        vp = np.asarray(model.v[:-1] * model.rho[:-1], dtype=float)
-        # per-layer two-way time
-        tau_PP = 2.0 * H * np.sqrt(1.0 / (vp**2) - bookkeeping.rayp[0]**2)
-        tau_SS = 2.0 * H * np.sqrt(1.0 / (vs**2) - bookkeeping.rayp[1]**2)
+        tau_PP = layer_travel_times(model, bookkeeping.rayp[0], assumptions=bookkeeping.assumptions, velocity_kind="vp")
+        tau_SS = layer_travel_times(model, bookkeeping.rayp[1], assumptions=bookkeeping.assumptions, velocity_kind="vs")
         # cumulative arrival times at each discontinuity
         arr_PP = np.cumsum(tau_PP)
         arr_SS = np.cumsum(tau_SS)
@@ -258,29 +279,25 @@ def create_arrivals_from_model(model: Model, bookkeeping: Bookkeeping):
         vp = np.asarray(model.v[:-1], dtype=float)
         rayp = bookkeeping.rayp
 
-        tau_PP = 2.0 * H * np.sqrt(1.0 / (vp**2) - rayp**2)
+        tau_PP = layer_travel_times(model, rayp, assumptions=bookkeeping.assumptions)
         arr_PP = np.cumsum(tau_PP)
 
         return arr_PP
 
     elif bookkeeping.mode == 2:  # SS only
-        vs = np.asarray(model.v[:-1], dtype=float)
         rayp = bookkeeping.rayp
 
-        tau_SS = 2.0 * H * np.sqrt(1.0 / (vs**2) - rayp**2)
+        tau_SS = layer_travel_times(model, rayp, assumptions=bookkeeping.assumptions)
         arr_SS = np.cumsum(tau_SS)
 
         return arr_SS
 
     elif bookkeeping.mode == 3:  # joint PP + SS
-        vs = np.asarray(model.v[:-1], dtype=float)
-        vp = np.asarray(model.v[:-1] * model.rho[:-1], dtype=float)
-
         rayp_PP = bookkeeping.rayp[0]
         rayp_SS = bookkeeping.rayp[1]
 
-        tau_PP = 2.0 * H * np.sqrt(1.0 / (vp**2) - rayp_PP**2)
-        tau_SS = 2.0 * H * np.sqrt(1.0 / (vs**2) - rayp_SS**2)
+        tau_PP = layer_travel_times(model, rayp_PP, assumptions=bookkeeping.assumptions, velocity_kind="vp")
+        tau_SS = layer_travel_times(model, rayp_SS, assumptions=bookkeeping.assumptions, velocity_kind="vs")
 
         arr_PP = np.cumsum(tau_PP)
         arr_SS = np.cumsum(tau_SS)

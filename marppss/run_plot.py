@@ -9,6 +9,7 @@ from marppss.visualization import (
     plot_posterior_error_params,
     plot_posterior_group_velocity_density,
     plot_posterior_num_phases,
+    plot_posterior_travel_time_distribution,
     plot_predicted_vs_input,
     plot_velocity_density_image,
     plot_velocity_ensemble,
@@ -222,7 +223,10 @@ def plot_run_directory(run_dir, top_chains=None, reference_config=None):
 
     ensemble_all, _, _ = _collect_chains(run_dir, top_chains=top_chains)
 
-    P, D = _load_observed_data(run_config, bookkeeping)
+    fit_waveform = getattr(bookkeeping, "fitWaveform", not bookkeeping.fitTT)
+    P, D = (None, None)
+    if fit_waveform or not bookkeeping.fitTT:
+        P, D = _load_observed_data(run_config, bookkeeping)
 
     H_true, v_true, rho_true = _load_latest_reference_model(
         run_config,
@@ -239,34 +243,45 @@ def plot_run_directory(run_dir, top_chains=None, reference_config=None):
         rho_true=rho_true,
         show=False,
     )
-    plot_velocity_density_image(
-        ensemble_all,
-        bookkeeping,
-        prior.HRange,
-        nz=200,
-        nv=200,
-        smooth_sigma=2.0,
-        H_true=H_true,
-        v_true=v_true,
-        rho_true=rho_true,
-        show=False,
-    )
-    plot_predicted_vs_input(ensemble_all, P, D, prior, bookkeeping, show=False)
+    density_image_would_duplicate_vpvs = bookkeeping.mode == 3 or (bookkeeping.fitgv and bookkeeping.fitrho)
+    if not density_image_would_duplicate_vpvs:
+        plot_velocity_density_image(
+            ensemble_all,
+            bookkeeping,
+            prior.HRange,
+            nz=200,
+            nv=200,
+            smooth_sigma=2.0,
+            H_true=H_true,
+            v_true=v_true,
+            rho_true=rho_true,
+            show=False,
+        )
+    if bookkeeping.fitTT and not fit_waveform:
+        try:
+            plot_posterior_travel_time_distribution(ensemble_all, bookkeeping, show=False)
+        except ValueError as exc:
+            print(f"Skipping travel-time posterior plot: {exc}")
+    else:
+        plot_predicted_vs_input(ensemble_all, P, D, prior, bookkeeping, show=False)
     plot_posterior_error_params(ensemble_all, bookkeeping, show=False)
     plot_posterior_num_phases(ensemble_all, show=False)
 
     gv_cfg = run_config.get("group_velocity")
     if bookkeeping.fitgv and gv_cfg:
-        plot_posterior_group_velocity_density(
-            ensemble_all,
-            bookkeeping,
-            gv_cfg["periods"],
-            gv_true=gv_cfg["values"],
-            vpvsr=gv_cfg.get("vpvsr", 1.8),
-            wave=gv_cfg.get("wave", "rayleigh"),
-            mode_idx=gv_cfg.get("mode", 0),
-            n_vel=200,
-            show=False,
-        )
+        try:
+            plot_posterior_group_velocity_density(
+                ensemble_all,
+                bookkeeping,
+                gv_cfg["periods"],
+                gv_true=gv_cfg["values"],
+                vpvsr=gv_cfg.get("vpvsr", 1.8),
+                wave=gv_cfg.get("wave", "rayleigh"),
+                mode_idx=gv_cfg.get("mode", 0),
+                n_vel=40,
+                show=False,
+            )
+        except ValueError as exc:
+            print(f"Skipping group-velocity posterior plot: {exc}")
 
     plt.show()
