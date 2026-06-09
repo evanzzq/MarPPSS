@@ -9,6 +9,15 @@ from marppss.rjmcmc import rjmcmc_run
 from marppss.util import prep_data, prepare_experiment
 
 
+class RunDirectoryExistsError(FileExistsError):
+    def __init__(self, run_root):
+        self.run_root = run_root
+        super().__init__(
+            f"Run directory already exists: {run_root}. "
+            "Use --overwrite to continue writing into this directory."
+        )
+
+
 def _normalize_freq_range(value):
     if value in (None, False):
         return None
@@ -44,6 +53,13 @@ def get_run_root(resolved):
     outdir = get_outdir(resolved)
     modname = build_modname(resolved["evname"], resolved["src_sigma"], resolved["mode"])
     return os.path.join(outdir, "run", modname, resolved["runname"])
+
+
+def ensure_run_root_available(resolved, overwrite=False):
+    run_root = get_run_root(resolved)
+    if os.path.exists(run_root) and not overwrite:
+        raise RunDirectoryExistsError(run_root)
+    return run_root
 
 
 def _serializable_resolved_config(resolved):
@@ -125,7 +141,7 @@ def run_chain(chain_id, exp_vars):
     np.savetxt(os.path.join(save_dir, "log_likelihood.txt"), logL_trace)
 
 
-def run_resolved_experiment(resolved, force_prep=False):
+def run_resolved_experiment(resolved, force_prep=False, overwrite=False):
     try:
         import yaml
     except ModuleNotFoundError as exc:
@@ -133,11 +149,12 @@ def run_resolved_experiment(resolved, force_prep=False):
             "PyYAML is required to save resolved run metadata. Install it with `pip install pyyaml`."
         ) from exc
 
-    resolved = ensure_prepared_data(resolved, force=force_prep)
     resolved["modname"] = build_modname(resolved["evname"], resolved["src_sigma"], resolved["mode"])
+    run_root = ensure_run_root_available(resolved, overwrite=overwrite)
+
+    resolved = ensure_prepared_data(resolved, force=force_prep)
 
     exp_vars = prepare_experiment(dict(resolved))
-    run_root = get_run_root(resolved)
     os.makedirs(run_root, exist_ok=True)
 
     with open(os.path.join(run_root, "config_resolved.yaml"), "w") as f:

@@ -1,4 +1,5 @@
 import argparse
+import sys
 from pathlib import Path
 
 from marppss.config import (
@@ -9,7 +10,12 @@ from marppss.config import (
     resolve_experiment,
 )
 from marppss.run_plot import plot_run_directory
-from marppss.workflow import ensure_prepared_data, run_resolved_experiment
+from marppss.workflow import (
+    RunDirectoryExistsError,
+    ensure_prepared_data,
+    ensure_run_root_available,
+    run_resolved_experiment,
+)
 
 
 def build_parser():
@@ -27,6 +33,11 @@ def build_parser():
     run.add_argument("config", help="Path to workflow YAML.")
     run.add_argument("--experiment", required=True, help="Experiment name to run.")
     run.add_argument("--force-prep", action="store_true", help="Rebuild prepared data before running.")
+    run.add_argument(
+        "--overwrite",
+        action="store_true",
+        help="Write into an existing run directory without prompting.",
+    )
 
     plot = subparsers.add_parser("plot", help="Plot results from a run directory.")
     plot.add_argument("run_dir", help="Path to a run directory containing config_resolved.yaml.")
@@ -57,7 +68,19 @@ def main(argv=None):
 
     if args.command == "run":
         resolved = resolve_experiment(args.config, args.experiment)
-        run_root = run_resolved_experiment(resolved, force_prep=args.force_prep)
+        overwrite = args.overwrite
+        if not overwrite:
+            try:
+                ensure_run_root_available(resolved)
+            except RunDirectoryExistsError as exc:
+                if not sys.stdin.isatty():
+                    parser.error(str(exc))
+                reply = input(f"Run directory already exists:\n  {exc.run_root}\nContinue and write into it? [y/N] ")
+                if reply.strip().lower() not in {"y", "yes"}:
+                    print("Aborted.")
+                    raise SystemExit(1)
+                overwrite = True
+        run_root = run_resolved_experiment(resolved, force_prep=args.force_prep, overwrite=overwrite)
         print(run_root)
         return
 

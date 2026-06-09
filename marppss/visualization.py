@@ -279,24 +279,55 @@ def plot_velocity_ensemble(models,
         depth_grid, ratio_profiles = sample_models_to_depth_grid(
             models, bookkeeping, HRange, nz=summary_nz, field="ratio"
         )
-        rgba_ratio, density_ratio, extent = _density_rgba(ratio_profiles, depth_grid, cmap_name="Blues", alpha_scale=0.9)
+        if _HAVE_KDE:
+            rgba_ratio, density_ratio, extent, _ = _depthwise_kde_rgba(
+                ratio_profiles,
+                depth_grid,
+                cmap_name="Blues",
+                alpha_scale=0.9,
+            )
+            density_label = "Depth-normalized KDE density"
+            density_legend_label = "Posterior KDE"
+        else:
+            rgba_ratio, density_ratio, extent = _density_rgba(
+                ratio_profiles,
+                depth_grid,
+                cmap_name="Blues",
+                alpha_scale=0.9,
+            )
+            density_label = "Normalized posterior probability"
+            density_legend_label = "Posterior density"
         ax_ratio.imshow(rgba_ratio, extent=extent, aspect="auto", interpolation="bilinear")
         sm_ratio = plt.cm.ScalarMappable(cmap="Blues", norm=plt.Normalize(vmin=0.0, vmax=1.0))
         sm_ratio.set_array(density_ratio)
-        fig_ratio.colorbar(sm_ratio, ax=ax_ratio, label="Normalized posterior probability")
+        fig_ratio.colorbar(sm_ratio, ax=ax_ratio, label=density_label)
+
+        ratio_q16, ratio_median, ratio_q84 = np.nanpercentile(
+            ratio_profiles,
+            [16.0, 50.0, 84.0],
+            axis=0,
+        )
+        ax_ratio.plot(ratio_median, depth_grid, color="k", linewidth=2.0, label="Vp/Vs median")
+        ax_ratio.plot(ratio_q16, depth_grid, color="k", linewidth=1.0, linestyle=":", label="16-84% interval")
+        ax_ratio.plot(ratio_q84, depth_grid, color="k", linewidth=1.0, linestyle=":")
 
         # True model for Vp/Vs
         if H_true is not None and rho_true is not None:
             rho_true = np.asarray(rho_true, dtype=float)
             vx_ratio_true, z_ratio_true = _model_to_step_profile(H_true, rho_true, HRange)
-            ax_ratio.plot(vx_ratio_true, z_ratio_true,
-                          color="k", label="Vp/Vs true", **true_kwargs)
+            ratio_true_kwargs = dict(true_kwargs)
+            ratio_true_kwargs.setdefault("color", "crimson")
+            ax_ratio.plot(vx_ratio_true, z_ratio_true, label="Vp/Vs true", **ratio_true_kwargs)
 
-        legend_handles = [Line2D([0], [0], color="C0", lw=4, label="Posterior density")]
+        legend_handles = [
+            Line2D([0], [0], color="C0", lw=4, label=density_legend_label),
+            Line2D([0], [0], color="k", lw=2.0, label="Vp/Vs median"),
+            Line2D([0], [0], color="k", lw=1.0, linestyle=":", label="16-84% interval"),
+        ]
         if H_true is not None and rho_true is not None:
             legend_handles.append(
                 Line2D([0], [0],
-                       color="k",
+                       color=ratio_true_kwargs.get("color", "crimson"),
                        lw=true_kwargs.get("linewidth", 2.5),
                        linestyle=true_kwargs.get("linestyle", "--"),
                        label="Vp/Vs true")
@@ -328,6 +359,12 @@ try:
     _HAVE_SCIPY = True
 except ImportError:
     _HAVE_SCIPY = False
+
+try:
+    from scipy.stats import gaussian_kde
+    _HAVE_KDE = True
+except ImportError:
+    _HAVE_KDE = False
 
 def _eval_profile_on_depths(H, v, depth_grid, a=0.0, assumptions=None):
     """
@@ -363,7 +400,8 @@ def _eval_profile_on_depths(H, v, depth_grid, a=0.0, assumptions=None):
     elif top_layer_gradient_enabled(assumptions):
         top_mask = idx == 0
         profile = profile.astype(float, copy=True)
-        profile[top_mask] = top_layer_velocity(v[0], a, depth_grid[top_mask], assumptions=assumptions)
+        top_slope = _as_slope_array(a, Nlayer)[0]
+        profile[top_mask] = top_layer_velocity(v[0], top_slope, depth_grid[top_mask], assumptions=assumptions)
     return profile
 
 
@@ -399,6 +437,63 @@ def _density_rgba(profiles, depth_grid, vmin=None, vmax=None, nv=220, cmap_name=
     rgba = cmap(np.clip(density, 0.0, 1.0))
     rgba[..., 3] = np.clip(density, 0.0, 1.0) ** gamma * alpha_scale
     return rgba, density, (vmin, vmax, depth_grid.max(), depth_grid.min())
+
+
+def _depthwise_kde_rgba(
+    profiles,
+    depth_grid,
+    vmin=None,
+    vmax=None,
+    nv=240,
+    cmap_name="Blues",
+    alpha_scale=0.9,
+    gamma=0.8,
+    contrast_power=1.8,
+):
+    depth_grid = np.asarray(depth_grid, dtype=float)
+    profiles = np.asarray(profiles, dtype=float)
+
+    finite = profiles[np.isfinite(profiles)]
+    if finite.size == 0:
+        raise ValueError("No finite profile values are available for KDE plotting.")
+
+    if vmin is None:
+        vmin = float(np.nanpercentile(finite, 0.5))
+    if vmax is None:
+        vmax = float(np.nanpercentile(finite, 99.5))
+    if not np.isfinite(vmin) or not np.isfinite(vmax) or vmax <= vmin:
+        center = float(np.nanmedian(finite))
+        pad = max(abs(center) * 0.02, 0.02)
+        vmin = center - pad
+        vmax = center + pad
+
+    value_grid = np.linspace(vmin, vmax, nv)
+    density = np.zeros((depth_grid.size, value_grid.size), dtype=float)
+
+    for iz in range(depth_grid.size):
+        values = profiles[:, iz]
+        values = values[np.isfinite(values)]
+        if values.size < 2:
+            continue
+        if np.nanmax(values) <= np.nanmin(values):
+            idx = int(np.argmin(np.abs(value_grid - values[0])))
+            density[iz, idx] = 1.0
+            continue
+        try:
+            density[iz, :] = gaussian_kde(values)(value_grid)
+        except Exception:
+            hist, edges = np.histogram(values, bins=value_grid.size, range=(vmin, vmax), density=True)
+            centers = 0.5 * (edges[:-1] + edges[1:])
+            density[iz, :] = np.interp(value_grid, centers, hist, left=0.0, right=0.0)
+
+    row_max = np.nanmax(density, axis=1, keepdims=True)
+    density_norm = np.divide(density, row_max, out=np.zeros_like(density), where=row_max > 0.0)
+    density_display = np.clip(density_norm, 0.0, 1.0) ** contrast_power
+
+    cmap = plt.get_cmap(cmap_name)
+    rgba = cmap(density_display)
+    rgba[..., 3] = density_display ** gamma * alpha_scale
+    return rgba, density_norm, (vmin, vmax, depth_grid.max(), depth_grid.min()), value_grid
 
 
 def sample_models_to_depth_grid(models, bookkeeping, HRange, nz=200, field="auto"):

@@ -8,7 +8,7 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from marppss.config import list_experiments, load_workflow_config, resolve_experiment
-from marppss.workflow import run_resolved_experiment
+from marppss.workflow import RunDirectoryExistsError, run_resolved_experiment
 
 
 def _select_experiments(config_path, explicit, use_all, prefixes):
@@ -69,6 +69,11 @@ def build_parser():
         help="Rebuild prepared data before each run.",
     )
     parser.add_argument(
+        "--overwrite",
+        action="store_true",
+        help="Write into existing run directories without stopping.",
+    )
+    parser.add_argument(
         "--dry-run",
         action="store_true",
         help="Print the selected experiments without running them.",
@@ -98,7 +103,14 @@ def main(argv=None):
     for idx, name in enumerate(experiments, start=1):
         print(f"\n[{idx}/{len(experiments)}] Running {name}")
         resolved = resolve_experiment(config_path, name)
-        run_root = run_resolved_experiment(resolved, force_prep=args.force_prep)
+        try:
+            run_root = run_resolved_experiment(
+                resolved,
+                force_prep=args.force_prep,
+                overwrite=args.overwrite,
+            )
+        except RunDirectoryExistsError as exc:
+            raise SystemExit(str(exc)) from exc
         print(f"Saved to: {run_root}")
 
 

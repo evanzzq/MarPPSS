@@ -87,6 +87,8 @@ PowerShell:
 python -m marppss run "$env:MARPPSS_CODE_DIR\configs\mars_workflow.example.yaml" --experiment s0976asdr_1883_gv_1to40_20
 ```
 
+If the resolved run directory already exists, the single-experiment command prompts before writing into it. To intentionally continue an existing run directory, add `--overwrite`.
+
 Another example:
 
 ```bash
@@ -100,6 +102,8 @@ python -m marppss run "$env:MARPPSS_CODE_DIR\configs\mars_workflow.example.yaml"
 ```
 
 ## 6. Run multiple experiments in batch
+
+Batch runs stop if any selected experiment already has a run directory. Add `--overwrite` only when you intentionally want to write into existing run folders.
 
 Dry run first:
 

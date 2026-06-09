@@ -38,7 +38,7 @@ defaults:
     burnInSteps: 800000
     nSaveModels: 200
     actionsPerStep: 1
-    num_chains: 8
+    num_chains: 48
   assumptions:
     fixed_vpvs: 1.8
     enforce_increasing_velocity: false
@@ -105,60 +105,9 @@ events:
         mode: 0
 
 experiments:
-  # s1000a_pp3_loge_off_all_linear_ppp:
-  #   event: S1000a_pzfiltered
-  #   mode: pp
-  #   runname: "s1000a_pp3_loge_off_all_linear_ppp_maxD_150"
-  #   fitWaveform: false
-  #   fitTT: true
-  #   fitgv: true
-  #   fitrho: true
-  #   fitLoge: false
-  #   fitRange: [0, 40, 0, 40]
-  #   HRange: [0.1, 150.0]
-  #   vRange: [0.1, 8.0]
-  #   aRange: [0.0, 0.5]
-  #   maxN: 50
-  #   assumptions:
-  #     enforce_increasing_velocity: false
-  #     top_layer_gradient: all_linear
-  #     minimum_velocity_jump_percent: 5.0
-  #     velocity_transition_directions: [inc, inc, inc]
-  #   constraints:
-  #     travel_times:
-  #       PP:
-  #         times: [10.39, 21.80, 32.35]
-  #         uncertainties: [0.2, 0.2, 0.2]
-
-  s1000a_pp3_loge_off_all_linear_ppn:
+  s1000a_pp3_gv3_loge_off_all_linear_pnp_48c:
     event: S1000a_pzfiltered
     mode: pp
-    runname: "s1000a_pp3_loge_off_all_linear_ppn_maxD_150"
-    fitWaveform: false
-    fitTT: true
-    fitgv: true
-    fitrho: true
-    fitLoge: false
-    fitRange: [0, 40, 0, 40]
-    HRange: [0.1, 150.0]
-    vRange: [0.1, 8.0]
-    aRange: [0.0, 0.5]
-    maxN: 50
-    assumptions:
-      enforce_increasing_velocity: false
-      top_layer_gradient: all_linear
-      minimum_velocity_jump_percent: 5.0
-      velocity_transition_directions: [inc, inc, dec]
-    constraints:
-      travel_times:
-        PP:
-          times: [10.39, 21.80, 32.35]
-          uncertainties: [0.2, 0.2, 0.2]
-
-  s1000a_pp3_loge_off_all_linear_pnp:
-    event: S1000a_pzfiltered
-    mode: pp
-    runname: "s1000a_pp3_loge_off_all_linear_pnp_maxD_150"
     fitWaveform: false
     fitTT: true
     fitgv: true
@@ -179,36 +128,16 @@ experiments:
         PP:
           times: [10.39, 21.80, 32.35]
           uncertainties: [0.2, 0.2, 0.2]
-
-  s1000a_pp2_loge_off_all_linear_pp:
+      group_velocity:
+        periods: [18.9, 28.86, 85.0]
+        values: [2.726, 2.829, 3.8]
+        uncertainties: 0.2
+        wave: rayleigh
+        mode: 0
+  
+  s1000a_pp2_gv3_loge_off_all_linear_pn_48c:
     event: S1000a_pzfiltered
     mode: pp
-    runname: "s1000a_pp2_loge_off_all_linear_pp_maxD_150"
-    fitWaveform: false
-    fitTT: true
-    fitgv: true
-    fitrho: true
-    fitLoge: false
-    fitRange: [0, 40, 0, 40]
-    HRange: [0.1, 150.0]
-    vRange: [0.1, 8.0]
-    aRange: [0.0, 0.5]
-    maxN: 50
-    assumptions:
-      enforce_increasing_velocity: false
-      top_layer_gradient: all_linear
-      minimum_velocity_jump_percent: 5.0
-      velocity_transition_directions: [inc, inc]
-    constraints:
-      travel_times:
-        PP:
-          times: [10.39, 21.80]
-          uncertainties: [0.2, 0.2]
-
-  s1000a_pp2_loge_off_all_linear_pn:
-    event: S1000a_pzfiltered
-    mode: pp
-    runname: "s1000a_pp2_loge_off_all_linear_pn_maxD_150"
     fitWaveform: false
     fitTT: true
     fitgv: true
@@ -229,3 +158,9 @@ experiments:
         PP:
           times: [10.39, 21.80]
           uncertainties: [0.2, 0.2]
+      group_velocity:
+        periods: [18.9, 28.86, 85.0]
+        values: [2.726, 2.829, 3.8]
+        uncertainties: 0.2
+        wave: rayleigh
+        mode: 0

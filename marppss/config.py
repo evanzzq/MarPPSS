@@ -222,6 +222,12 @@ def _resolve_new_experiment(config, experiment_name):
 
     resolved = _flatten_event(path_cfg, defaults, event_name, event_cfg)
     exp_cfg = experiments[experiment_name]
+    runname = exp_cfg.get("runname", experiment_name)
+    if runname != experiment_name:
+        raise ValueError(
+            f"Experiment '{experiment_name}' has runname '{runname}'. "
+            "For new-style configs, omit runname or set it equal to the experiment name."
+        )
 
     prior_defaults = defaults.get("prior", {})
     inversion_defaults = defaults.get("inversion", {})
@@ -233,7 +239,7 @@ def _resolve_new_experiment(config, experiment_name):
         {
             "experiment_name": experiment_name,
             "mode": _canonical_mode(exp_cfg["mode"]),
-            "runname": exp_cfg["runname"],
+            "runname": runname,
             "useCD": exp_cfg.get("useCD", inversion_defaults.get("useCD", False)),
             "fitWaveform": exp_cfg.get("fitWaveform", inversion_defaults.get("fitWaveform", True)),
             "fitLoge": exp_cfg.get("fitLoge", inversion_defaults.get("fitLoge", True)),
